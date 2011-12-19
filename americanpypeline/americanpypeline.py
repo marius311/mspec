@@ -85,8 +85,8 @@ class PowerSpectra():
         elif (isinstance(self.cov,ndarray)):
             assert maps!=None, "You must provide a list of maps names."
             nps = len(pairs(maps))
-            cov_blocks = array(dsplit(array(vsplit(self.cov,nps)),nps))
-            self.cov = SymmetricTensorDict([((p1,p2),cov_blocks[i,j]) for (i,p1) in zip(range(nps),pairs(maps)) for (j,p2) in zip(range(nps),pairs(maps))],rank=4)
+            nl = alen(self.cov)/nps
+            self.cov = SymmetricTensorDict([((p1,p2),self.cov[i*nl:(i+1)*nl,j*nl:(j+1)*nl]) for (i,p1) in zip(range(nps),pairs(maps)) for (j,p2) in zip(range(nps),pairs(maps))],rank=4)
         else: raise ValueError("Expected covariance to be a matrix or dictionary.")
               
         assert self.spectra or self.ells!=None, "You must either provide some spectra or some ells"
