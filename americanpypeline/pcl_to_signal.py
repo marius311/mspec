@@ -84,9 +84,8 @@ if __name__=="__main__":
     # The raw pseudo-C_ells
     if (is_mpi_master()): print "Loading pseudo-cl's..."
     pcls = load_pcls(params)
+#    maps = flatten([[m for m in pcls.get_maps() if m.fr==fr][:4] for fr in  freqs])
     maps = [m for m in pcls.get_maps() if m.fr in freqs]
-#    maps = [m for m in [MapID('143','T','1a'),MapID('143','T','1b'),MapID('217','T','1'),MapID('217','T','2'),MapID('353','T','1'),MapID('353','T','2')] if m.fr in freqs]
-#    maps = [m for m in [MapID('143','T','1a'),MapID('217','T','1'),MapID('353','T','1')] if m.fr in freqs]
     if set(maps) - set(beam.keys()):
         print "Warning: Missing beams for the following detectors: \n"+str(set(maps) - set(beam.keys()))+"\
                \nContinuing without those maps."
@@ -143,7 +142,8 @@ if __name__=="__main__":
                     for (((a,b),(c,d)),syms) in abcds
                 )
                 
-            abcds=[(((a,b),(c,d)),set([((a,b),(c,d)),((a,b),(d,c)),((b,a),(c,d)),((b,a),(d,c))])) for ((a,b),(c,d)) in pairs(pairs(maps)) 
+            abcds=[(((a,b),(c,d)),[((a,b),(c,d)),((b,a),(c,d)),((a,b),(d,c)),((b,a),(d,c))]) 
+                   for (a,b) in pairs(maps) for (c,d) in pairs(maps)
                    if a.fr==alpha and b.fr==beta and c.fr==gamma and d.fr==delta]
             
             s = sum(mpi_map(term,partition(abcds,get_mpi_size())),axis=0)

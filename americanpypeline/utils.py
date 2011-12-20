@@ -1,12 +1,12 @@
 import re, os
-from itertools import combinations_with_replacement
+from itertools import combinations_with_replacement, product
 from numpy import load, loadtxt, isfinite
 from matplotlib.pyplot import errorbar
 import itertools
 
 
 def test_sym(m):
-    return max([x for x in flatten((abs(m-m.T))/((m+m.T)/2.)) if isfinite(x)])
+    return max(x for x in ((abs(m-m.T))/((m+m.T)/2.)).flatten() if isfinite(x))
     
 AProotdir = os.path.join(os.path.dirname(__file__),"..")
 
@@ -105,7 +105,7 @@ def pairs(*arg):
         Returns a list of tuples corresponding to all (order unimportant) pairs of one element from each list
     """
     if (len(arg)==1): return list(combinations_with_replacement(arg[0],2))
-    elif (len(arg)==2): return list(set(map(sorted,product(arg[0],arg[1]))))
+    elif (len(arg)==2): return list(set(product(arg[0],arg[1])))
     else: raise ValueError("pairs expected one or two lists as an argument")
 
 def flatten(l):

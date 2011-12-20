@@ -13,13 +13,10 @@ import sys, os, re, gc
 freqs = ['143','217','353']
 
 MapID = namedtuple("MapID", ["fr","type","id"])
-MapID.__str__ = lambda self: "-".join(self)  
+MapID.__str__ = MapID.__repr__ = lambda self: "-".join(self)  
 
 
-def cov_syms(((a,b),(c,d))):
-    return set([((a,b),(c,d)),((b,a),(c,d)),((a,b),(d,c)),((b,a),(d,c)),
-            ((c,d),(a,b)),((c,d),(b,a)),((d,c),(a,b)),((d,c),(b,a))])
-    
+
 class SymmetricTensorDict(dict):
     """
     A dictionary where keys are either (a,b) or ((a,b),(c,d)). 
@@ -42,7 +39,10 @@ class SymmetricTensorDict(dict):
             dict.__setitem__(self,(a,b),value)
             dict.__setitem__(self,(b,a),value)
         else:
-            for k in cov_syms(key): dict.__setitem__(self,k,value)
+            ((a,b),(c,d)) = key
+            for k in set([((a,b),(c,d)),((b,a),(c,d)),((a,b),(d,c)),((b,a),(d,c))]): dict.__setitem__(self,k,value)
+            for k in set([((c,d),(a,b)),((c,d),(b,a)),((d,c),(a,b)),((d,c),(b,a))]): dict.__setitem__(self,k,value.T)
+
 
     def get_index_values(self):
         """
@@ -86,7 +86,7 @@ class PowerSpectra():
             assert maps!=None, "You must provide a list of maps names."
             nps = len(pairs(maps))
             nl = alen(self.cov)/nps
-            self.cov = SymmetricTensorDict([((p1,p2),self.cov[i*nl:(i+1)*nl,j*nl:(j+1)*nl]) for (i,p1) in zip(range(nps),pairs(maps)) for (j,p2) in zip(range(nps),pairs(maps))],rank=4)
+            self.cov = SymmetricTensorDict([((p1,p2),self.cov[i*nl:(i+1)*nl,j*nl:(j+1)*nl]) for (i,p1) in zip(range(nps),pairs(maps)) for (j,p2) in zip(range(nps),pairs(maps)) if i<=j],rank=4)
         else: raise ValueError("Expected covariance to be a matrix or dictionary.")
               
         assert self.spectra or self.ells!=None, "You must either provide some spectra or some ells"
@@ -117,10 +117,10 @@ class PowerSpectra():
                 cov_mat = zeros((nl*nps,nl*nps))
                 for (i,p1) in enumerate(pairs(self.get_maps())):
                     for (j,p2) in enumerate(pairs(self.get_maps())):
-                        cov_mat[i::nps,j::nps] = self.cov[(p1,p2)] if i>j else self.cov[(p1,p2)].T
+                        cov_mat[i::nps,j::nps] = self.cov[(p1,p2)]
         else:
             spec_mat = vstack(vstack([self.ells,self.spectra[(alpha,beta)]]).T for (alpha,beta) in pairs(self.get_maps()))
-            if (self.cov): cov_mat = vstack(dstack(array([[(lambda c: c if (p1,p2) in pairs(pairs(self.get_maps())) else c.T)(self.cov[(p1,p2)]) for p1 in pairs(self.get_maps())] for p2 in pairs(self.get_maps())])))
+            if (self.cov): cov_mat = vstack(dstack(array([[self.cov[(p1,p2)] for p1 in pairs(self.get_maps())] for p2 in pairs(self.get_maps())])))
             
         return namedtuple("SpecCov", ['spec','cov'])(spec_mat,cov_mat)
 
