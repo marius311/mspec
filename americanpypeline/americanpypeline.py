@@ -112,7 +112,12 @@ class PowerSpectra():
         cov_mat=None
         if ell_blocks:
             spec_mat = vstack([[[ell,self.spectra[k][iell]] for k in pairs(self.get_maps())] for (iell,ell) in enumerate(self.ells)])
-            if (self.cov): cov_mat = vstack(dstack(array([[[[(lambda c: c[l1,l2] if (p1,p2) in pairs(pairs(self.get_maps())) else c[l2,l1])(self.cov[(p1,p2)]) for p1 in pairs(self.get_maps())] for p2 in pairs(self.get_maps())] for l1 in range(len(self.ells))] for l2 in range(len(self.ells))])))
+            if (self.cov): 
+                nl, nps = alen(self.ells), alen(pairs(self.get_maps()))
+                cov_mat = zeros((nl*nps,nl*nps))
+                for (i,p1) in enumerate(pairs(self.get_maps())):
+                    for (j,p2) in enumerate(pairs(self.get_maps())):
+                        cov_mat[i::nps,j::nps] = self.cov[(p1,p2)] if i>j else self.cov[(p1,p2)].T
         else:
             spec_mat = vstack(vstack([self.ells,self.spectra[(alpha,beta)]]).T for (alpha,beta) in pairs(self.get_maps()))
             if (self.cov): cov_mat = vstack(dstack(array([[(lambda c: c if (p1,p2) in pairs(pairs(self.get_maps())) else c.T)(self.cov[(p1,p2)]) for p1 in pairs(self.get_maps())] for p2 in pairs(self.get_maps())])))

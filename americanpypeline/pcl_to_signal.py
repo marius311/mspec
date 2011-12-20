@@ -88,12 +88,11 @@ if __name__=="__main__":
 #    maps = [m for m in [MapID('143','T','1a'),MapID('143','T','1b'),MapID('217','T','1'),MapID('217','T','2'),MapID('353','T','1'),MapID('353','T','2')] if m.fr in freqs]
 #    maps = [m for m in [MapID('143','T','1a'),MapID('217','T','1'),MapID('353','T','1')] if m.fr in freqs]
     if set(maps) - set(beam.keys()):
-        
         print "Warning: Missing beams for the following detectors: \n"+str(set(maps) - set(beam.keys()))+"\
                \nContinuing without those maps."
         maps = [m for m in maps if m in beam.keys()]
     
-    
+        
     #Equation (4), the per detector signal estimate
     hat_cls_det = PowerSpectra(ells=ells)
     for (a,b) in pairs(maps): hat_cls_det[(a,b)] = bin((dot(imll,pcls[(a,b)]) - (noise(a) if a==b else 0))/(beam[a]*beam[b]))
@@ -144,7 +143,7 @@ if __name__=="__main__":
                     for (((a,b),(c,d)),syms) in abcds
                 )
                 
-            abcds=[(((a,b),(c,d)),cov_syms(((a,b),(c,d)))) for ((a,b),(c,d)) in pairs(pairs(maps)) 
+            abcds=[(((a,b),(c,d)),set([((a,b),(c,d)),((a,b),(d,c)),((b,a),(c,d)),((b,a),(d,c))])) for ((a,b),(c,d)) in pairs(pairs(maps)) 
                    if a.fr==alpha and b.fr==beta and c.fr==gamma and d.fr==delta]
             
             s = sum(mpi_map(term,partition(abcds,get_mpi_size())),axis=0)

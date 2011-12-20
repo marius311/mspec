@@ -3,7 +3,6 @@
 import mcmc
 from americanpypeline import *
 import sys
-sys.path+=['/home/marius/workspace/picotrainer/source/pico/python_files']
 import pycamb
 from scipy.linalg import cho_factor, cho_solve
 import skymodel
