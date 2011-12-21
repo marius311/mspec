@@ -397,7 +397,7 @@ def load_beams(params):
 def cmb_orient(wmap=True,spt=True):
     if (wmap):
         wmap = loadtxt(os.path.join(AProotdir,"dat/external/wmap_binned_tt_spectrum_7yr_v4p1.txt"))
-        errorbar(wmap[:,0],wmap[:,3],yerr=wmap[:,5],fmt='.',label='WMAP7')
+        errorbar(wmap[:,0],wmap[:,3],yerr=wmap[:,4],fmt='.',label='WMAP7')
     if (spt):
         spt = loadtxt(os.path.join(AProotdir,"dat/external/dl_spt20082009.txt"))
         errorbar(spt[:,0],spt[:,1],yerr=spt[:,2],fmt='.',label='SPT K11')
