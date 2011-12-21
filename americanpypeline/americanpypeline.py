@@ -178,6 +178,7 @@ class PowerSpectra():
                    ) if normalize else 1))
                   for (((alpha2,coeff_a),(beta2,coeff_b)),((gamma2,coeff_g),(delta2,coeff_d))) in pairs(pairs(new_maps))
               ],rank=4)
+            
         else:
             cov = None
         
@@ -211,6 +212,7 @@ class PowerSpectra():
         return self.apply_func(lambda _, spec: spec*fac, lambda _, cov: cov*outer(fac,fac))
     
     def binned(self,bin):
+        if (type(bin)==str): bin = get_bin_func(bin)
         ps = self.apply_func(lambda _, spec: bin(spec), lambda _, cov: bin(cov))
         ps.ells = bin(self.ells)
         ps.bin = bin

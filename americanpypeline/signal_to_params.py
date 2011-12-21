@@ -24,7 +24,7 @@ def lnl(p):
     
 def get_skymodel(p):
     ells=arange(p["lmax"])
-    dgpo = lambda p, ps: skymodel.fg_from_amps(p,ps,"dg_po",ells*(ells+1)/(p["norm_ell"]*(p["norm_ell"]+1)))
+    dgpo = lambda p, ps: skymodel.fg_from_amps(p,ps,"dgpo",ells*(ells+1)/(p["norm_ell"]*(p["norm_ell"]+1)))
     radio = lambda p, ps: skymodel.fg_from_amps(p,ps,"radio",ells*(ells+1)/(p["norm_ell"]*(p["norm_ell"]+1)))
     comps = [skymodel.cmb,dgpo,radio]
     return PowerSpectra.sum([comp(p,pairs(p["signal"].get_maps())) for comp in comps])
