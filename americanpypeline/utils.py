@@ -1,9 +1,10 @@
 import re, os
 from itertools import combinations_with_replacement, product
-from numpy import load, loadtxt, isfinite
+from numpy import load, loadtxt, isfinite, float64, array, float32
 from matplotlib.pyplot import errorbar
 import itertools
 
+def_dtype = float64
 
 def test_sym(m):
     return max(x for x in ((abs(m-m.T))/((m+m.T)/2.)).flatten() if isfinite(x))
@@ -76,8 +77,8 @@ def mpi_map(function,sequence,distribute=False):
                 return []
 
 def load_multi(path):
-    if os.path.exists(path+".npy"): return load(path+".npy")
-    elif os.path.exists(path): return loadtxt(path)
+    if os.path.exists(path+".npy"): return array(load(path+".npy"),dtype=def_dtype)
+    elif os.path.exists(path): return loadtxt(path,dtype=def_dtype)
     else: raise IOError("No such file or directory: "+path+".npy or "+path)
 
 def save_multi(path,dat):
