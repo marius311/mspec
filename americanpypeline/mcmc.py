@@ -1,8 +1,8 @@
 import sys, os, re
 import numpy as np
-from numpy import array, shape, loadtxt, log, genfromtxt, cov, sqrt, diag, vstack, sum, average, hstack, mean
+from numpy import array, shape, loadtxt, log, genfromtxt, cov, sqrt, diag, vstack, sum, average, hstack, mean, savetxt
 from random import random
-from itertools import product
+from itertools import product, repeat
 from matplotlib.pyplot import plot, hist
 
 
@@ -281,7 +281,7 @@ def propose_step_gaussian(params):
     nparams = len(varied_params)
     if (shape(cov)!=(nparams,nparams)):
         raise ValueError("Covariance not the same length as number varied parameters.")
-    dxs = np.random.multivariate_normal([0]*nparams,cov) * params["$COV_FAC"]
+    dxs = np.random.multivariate_normal([0]*nparams,cov) * sqrt(params["$COV_FAC"])
     propose = params.copy()
     for (name,dx) in zip(varied_params,dxs): propose[name]+=dx
     return propose
@@ -340,9 +340,14 @@ class Chain(dict):
     def acceptance(self): return mean(1./self["weight"])
     def savecov(self,file,params=None):
         if not params: params = self.params()
-        with open(file) as f:
-            f.write("# "+" ".join(params))
+        with open(file,'w') as f:
+            f.write("# "+" ".join(params)+"\n")
             savetxt(f,self.cov(params))
+    def savechain(self,file,params=None):
+        keys = ['lnl','weight']+list(params if params else self.params())
+        with open(file,'w') as f:
+            f.write("# "+" ".join(keys)+"\n")
+            savetxt(f,self.matrix(keys))
         
 class Chains(list):
     def burnin(self,nsamp): return Chains(c.sample(slice(nsamp,-1)) for c in self)
@@ -354,9 +359,10 @@ def load_chain(filename):
     def load_one_chain(filename):
         with open(filename) as file:
             names = re.sub("#","",file.readline()).split()
-            data = genfromtxt(file)
+            try: data = loadtxt(file)
+            except: data = None
             
-        return Chain([(name,data[:,i]) for (i,name) in enumerate(names)])
+        return Chain([(name,data[:,i] if data!=None else array([])) for (i,name) in enumerate(names)])
         
     dir = os.path.dirname(filename)
     files = [os.path.join(dir,f) for f in os.listdir(dir) if f.startswith(os.path.basename(filename))]

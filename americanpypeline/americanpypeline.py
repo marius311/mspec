@@ -8,7 +8,6 @@ from scipy.optimize import fmin
 from utils import *
 import healpy as H
 import sys, os, re, gc
-import signal_to_params, mcmc
 
 
 freqs = ['143','217','353']
