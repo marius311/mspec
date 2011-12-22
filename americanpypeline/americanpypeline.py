@@ -8,6 +8,7 @@ from scipy.optimize import fmin
 from utils import *
 import healpy as H
 import sys, os, re, gc
+import signal_to_params, mcmc
 
 
 freqs = ['143','217','353']
@@ -395,6 +396,18 @@ def load_beams(params):
     files = [(os.path.join(params["beams"],f),regex.search(f)) for f in os.listdir(params["beams"])]
     return dict([(MapID(r.group(1),'T',r.group(2)),loadtxt(f)[:int(params["lmax"]),1]) for (f,r) in files if r!=None])
     
+def load_chain_params(params):
+    class dp(type(params)):
+        def __setitem__(self,k,v):
+            super(dp,self).__setitem__(k,v)
+            signal_to_params.camb_derived(self)
+
+    params = read_AP_ini(params)
+    params = mcmc.get_processed_params(params)
+    signal_to_params.init(params)
+    params.__setitem__
+    
+    return params
     
 def cmb_orient(wmap=True,spt=True):
     if (wmap):

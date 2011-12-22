@@ -38,12 +38,12 @@ def init(p):
         print "Initializing WMAP..."
         pywmap.wmapinit(p["wmap_data_dir"])
     
+    print "Loading signal and covariance..."
     p["ells"]=arange(p["lmin"],p["lmax"])
     p["signal"]=load_clean_calib_signal(p).sliced(p["lmin"],p["lmax"]).binned(p["mcmc_binning"])
     p["signal_mat"]=p["signal"].get_as_matrix(ell_blocks=True)
     p["signal_mat"]=namedtuple("SpecCov",["spec","cov"])(p["signal_mat"].spec[:,1],cho_factor(p["signal_mat"].cov))
     
-    print "Starting chain..."
 
 if __name__=="__main__":
     

@@ -1,8 +1,10 @@
 import sys, os, re
 import numpy as np
-from numpy import array, shape, loadtxt, log, genfromtxt, cov
+from numpy import array, shape, loadtxt, log, genfromtxt, cov, sqrt, diag, vstack, sum, average, hstack, mean
 from random import random
 from itertools import product
+from matplotlib.pyplot import plot, hist
+
 
 """
 
@@ -74,7 +76,7 @@ def mcmc(start,lnl,init_fn=[],derived_fn=[],step_fn=[]):
         #Get likelihood
         if (test_lnl != np.inf): test_lnl = sum([l(test_params) for l in lnl])
                 
-        mcmc_log(cur_params,"Like="+str(test_lnl)+" Ratio="+str(np.mean(1./array(samples["weight"])))+" Sample="+str(dict([(name,test_params[name]) for name in get_outputted(cur_params)]))) 
+#        mcmc_log(cur_params,"Like="+str(test_lnl)+" Ratio="+str(np.mean(1./array(samples["weight"])))+" Sample="+str(dict([(name,test_params[name]) for name in get_outputted(cur_params)]))) 
 
         if (log(random()) < samples["lnl"][-1]-test_lnl):
 
@@ -164,11 +166,11 @@ def mpi_mcmc(start,lnl,init_fn=[],derived_fn=[],step_fn=[]):
         This is the worker process code.
         """
         if (sum(samples["weight"])%delta_send_samples==0):
-            mcmc_log(params,"Chain "+str(rank)+": steps="+str(sum(samples["weight"]))+" approval="+str(np.mean(1/array(samples["weight"])))+" best:"+str(min(samples["lnl"][1:])))
+            mcmc_log(params,"Chain "+str(rank)+": steps="+str(sum(samples["weight"]))+" approval="+str(np.mean(1./array(samples["weight"])))+" best:"+str(min(samples["lnl"][1:])))
             comm.send((rank,wslice(samples,delta_send_samples)))    
             new_params = comm.recv()
             if (new_params!=None):  
-                mcmc_log(params,"Chain "+str(rank)+": Updating "+str(new_params.keys()))
+                mcmc_log(params,"Chain "+str(rank)+": New proposal "+str(zip(get_varied(params),sqrt(diag(new_params["$COV"])))))
                 params.update(new_params)
 
     def mpi_master_fn(samples,source):
@@ -181,10 +183,8 @@ def mpi_mcmc(start,lnl,init_fn=[],derived_fn=[],step_fn=[]):
         
         """
         
-        if (start["$UPDATECOV"] and (lambda x: x>=200 and x%delta_send_samples==0)(sum(samples[source-1]["weight"])) and start["$RMIN"]<gelman_rubin_R(samples)<start["$RMAX"]): 
-            x = {"$COV":get_new_proposal(samples, start)}
-            print x
-            return x
+        if (start["$UPDATECOV"] and (lambda x: x>=2000 and x%delta_send_samples==0)(sum(samples[source-1]["weight"])) and start["$RMIN"]<gelman_rubin_R(samples)<start["$RMAX"]): 
+            return {"$COV":get_new_proposal(samples, start)}
         else: 
             return None
 
@@ -328,18 +328,40 @@ def gelman_rubin_R(samples):
     return 1
     
 
+class Chain(dict):
+    def params(self): return set(self.keys())-set(["lnl","weight"])
+    def sample(self,s,keys=None): return Chain((k,self[k][s]) for k in (keys if keys else self.keys()))
+    def matrix(self,params=None): return vstack([self[p] for p in (params if params else self.params())]).T
+    def cov(self,params=None): return get_covariance(self.matrix(params), self["weight"])
+    def mean(self,params=None): return average(self.matrix(params),axis=0,weights=self["weight"])
+    def std(self,params=None): return sqrt(average((self.matrix(params)-self.mean(params))**2,axis=0,weights=self["weight"]))
+    def like1d(self,p,bins=30): hist(self[p],weights=self["weight"],bins=bins,normed=True)
+    def like2d(self,p1,p2): raise NotImplementedError()
+    def acceptance(self): return mean(1./self["weight"])
+    def savecov(self,file,params=None):
+        if not params: params = self.params()
+        with open(file) as f:
+            f.write("# "+" ".join(params))
+            savetxt(f,self.cov(params))
+        
+class Chains(list):
+    def burnin(self,nsamp): return Chains(c.sample(slice(nsamp,-1)) for c in self)
+    def join(self): return Chain((k,hstack([c[k] for c in self])) for k in self[0].keys())
+    def plot(self,param): 
+        for c in self: plot(c[param])
+    
 def load_chain(filename):
     def load_one_chain(filename):
         with open(filename) as file:
             names = re.sub("#","",file.readline()).split()
             data = genfromtxt(file)
             
-        return dict([(name,data[:,i]) for (i,name) in enumerate(names)])
+        return Chain([(name,data[:,i]) for (i,name) in enumerate(names)])
         
     dir = os.path.dirname(filename)
     files = [os.path.join(dir,f) for f in os.listdir(dir) if f.startswith(os.path.basename(filename))]
     if len(files)==1: return load_one_chain(files[0])
-    elif len(files)>1: return map(load_one_chain,files)
+    elif len(files)>1: return Chains(load_one_chain(f) for f in files)
     else: raise IOError("File not found: "+filename) 
 
 
