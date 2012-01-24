@@ -1,11 +1,11 @@
 from americanpypeline import *
-import pycamb
+import pypico
 from utils import *
 from numpy import *
 import os
 
 def cmb(p,ps):
-    cmb = hstack([[0,0],pycamb.pico(**p)[0][:p["lmax"]-2]])
+    cmb = hstack([[0,0],pypico.pico(**p)[0][:p["lmax"]-2]])
     return PowerSpectra({k:cmb for k in ps})
 
 def cmb_wmap(p,ps):

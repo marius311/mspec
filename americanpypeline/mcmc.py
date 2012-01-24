@@ -1,9 +1,10 @@
 import sys, os, re
 import numpy as np
-from numpy import array, shape, loadtxt, log, genfromtxt, cov, sqrt, diag, vstack, sum, average, hstack, mean, savetxt
+from numpy import array, shape, loadtxt, log, genfromtxt, cov, sqrt, diag, vstack, sum, average, hstack, mean, savetxt, histogram, histogram2d
 from random import random
 from itertools import product, repeat
-from matplotlib.pyplot import plot, hist
+from matplotlib.mlab import movavg
+from matplotlib.pyplot import plot, hist, contour
 
 
 """
@@ -73,6 +74,8 @@ def mcmc(start,lnl,init_fn=[],derived_fn=[],step_fn=[]):
         for name in get_varied(test_params): 
             if (not (test_params["*"+name][1] < test_params[name] < test_params["*"+name][2])): test_lnl = np.inf
         
+        mcmc_log(cur_params," Ratio="+str(np.mean(1./array(samples["weight"])))+" Sample="+str(dict([(name,test_params[name]) for name in get_outputted(cur_params)]))) 
+
         #Get likelihood
         if (test_lnl != np.inf): test_lnl = sum([l(test_params) for l in lnl])
                 
@@ -335,7 +338,7 @@ class Chain(dict):
     def cov(self,params=None): return get_covariance(self.matrix(params), self["weight"])
     def mean(self,params=None): return average(self.matrix(params),axis=0,weights=self["weight"])
     def std(self,params=None): return sqrt(average((self.matrix(params)-self.mean(params))**2,axis=0,weights=self["weight"]))
-    def like1d(self,p,bins=30): hist(self[p],weights=self["weight"],bins=bins,normed=True)
+    def like1d(self,p,nbins=30): likelihoodplot1d(self[p],weights=self["weight"],nbins=nbins)
     def like2d(self,p1,p2): raise NotImplementedError()
     def acceptance(self): return mean(1./self["weight"])
     def savecov(self,file,params=None):
@@ -355,6 +358,20 @@ class Chains(list):
     def plot(self,param): 
         for c in self: plot(c[param])
     
+def likelihoodplot2d(datx,daty,weights=None,nbins=15,which=[.68,.95],plotfunc=contour,colors='k'):
+    if (weights==None): weights=ones(len(datx))
+    H,xe,ye = histogram2d(datx,daty,nbins,weights=weights)
+    xem=movavg(xe,2)
+    yem=movavg(ye,2)
+    plotfunc(xem,yem,transpose(H),levels=confint2d(H, which[::-1]+[0]),colors=colors)
+    
+def likelihoodplot1d(dat,weights=None,nbins=30,range=None,maxed=True):
+    if (weights==None): weights=ones(len(dat))
+    H, xe = histogram(dat,bins=nbins,weights=weights,normed=True,range=range)
+    if maxed: H=H/max(H)
+    xem=movavg(xe,2)
+    plot(xem,H)
+
 def load_chain(filename):
     def load_one_chain(filename):
         with open(filename) as file:

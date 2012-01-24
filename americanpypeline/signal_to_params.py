@@ -3,13 +3,13 @@
 import mcmc
 from americanpypeline import *
 import sys
-import pycamb
+import pypico
 from scipy.linalg import cho_factor, cho_solve
 import skymodel
 
     
 def camb_derived(p):
-    h = pycamb.theta2hubble(p["theta"],p["omegabh2"],p["omegach2"],p["omegak"],p["omeganuh2"],p["w"],p["massless_neutrinos"],p["massive_neutrinos"])/100.
+    h = pypico.theta2hubble(p["theta"],p["omegabh2"],p["omegach2"],p["omegak"],p["omeganuh2"],p["w"],p["massless_neutrinos"],p["massive_neutrinos"])/100.
     p["H0"]=100*h
     p["omegab"]=p["omegabh2"]/h**2
     p["omegac"]=p["omegach2"]/h**2
@@ -33,7 +33,7 @@ def init(p):
     p["warn"]=False
     if ("pico_datafile" in p):
         print "Initializing PICO..."
-        pycamb.picoinit(p["pico_datafile"],verbose=p.get("pico_verbose",True))
+        pypico.picoinit(p["pico_datafile"],verbose=p.get("pico_verbose",True))
     if ("wmadata_dir" in p):
         print "Initializing WMAP..."
         pywmap.wmapinit(p["wmap_data_dir"])
@@ -44,6 +44,19 @@ def init(p):
     p["signal_mat"]=p["signal"].get_as_matrix(ell_blocks=True)
     p["signal_mat"]=namedtuple("SpecCov",["spec","cov"])(p["signal_mat"].spec[:,1],cho_factor(p["signal_mat"].cov))
     
+    
+def load_chain_params(params):
+    class dp(type(params)):
+        def __setitem__(self,k,v):
+            super(dp,self).__setitem__(k,v)
+            signal_to_params.camb_derived(self)
+
+    params = read_AP_ini(params)
+    params = mcmc.get_processed_params(params)
+    init(params)
+    
+    return params
+
 
 if __name__=="__main__":
     

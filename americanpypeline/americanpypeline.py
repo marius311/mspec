@@ -1,7 +1,8 @@
 from ast import literal_eval
 from bisect import bisect_right
 from collections import namedtuple
-from matplotlib.pyplot import *
+from matplotlib.pyplot import plot, errorbar, contour, yscale
+from matplotlib.mlab import movavg
 from numpy import *
 from numpy.linalg import norm
 from scipy.optimize import fmin
@@ -143,7 +144,7 @@ class PowerSpectra():
         fid = mean([self.spectra[(a,b)][ells]*weighting for (a,b) in pairs(maps)],axis=0)
         def miscalib(calib):
             return sum(norm(self.spectra[(a,b)][ells]*weighting*calib[ia]*calib[ib] - fid) for ((a,ia),(b,ib)) in pairs(zip(maps,range(len(maps)))))
-        calib = fmin(miscalib,ones(len(maps)))
+        calib = fmin(miscalib,ones(len(maps)),disp=False)
         return [(newmap,[(newmap,calib[maps.index(newmap)] if newmap in maps else 1)]) for newmap in self.get_maps()]
         
     
@@ -192,7 +193,7 @@ class PowerSpectra():
                          label=prefix+str(a)+" x "+str(b),fmt=kwargs.pop("fmt","."),**kwargs)
         else:
             for (a,b) in which:
-                plot(self.ells,self.spectra[(a,b)],label=str(a)+" x "+str(b),**kwargs)
+                plot(self.ells,self.spectra[(a,b)],label=prefix+str(a)+" x "+str(b),**kwargs)
         yscale("log")
 
 
@@ -255,7 +256,6 @@ def read_AP_ini(params):
         p = read_ini(params)
         p["lmin"]=int(p.get("lmin",0))
         p["lmax"]=int(p["lmax"])
-        p.update(get_mask_info(p["mask"]))
         if "cleaning" in p: p["cleaning"]=[(outmap,[(str(inmap),coeff) for (inmap,coeff) in lc]) for (outmap,lc) in literal_eval(p["cleaning"]).items()]
         else: p["cleaning"]=None
         p["pcl_binning"]=get_bin_func(p.get("pcl_binning","none"))
@@ -275,7 +275,18 @@ def alm2cl(alm1,alm2):
     lmax = min(lmax1,lmax2)
     return array(real([(alm1[l]*alm2[l]+2*real(vdot(alm1[H.Alm.getidx(lmax1,l,arange(1,l+1))],alm2[H.Alm.getidx(lmax2,l,arange(1,l+1))])))/(2*l+1) for l in range(lmax)]))
 
-
+def smooth_alms(alm,wl):
+    """
+    Smooth the given alms with a symmetric kernel with a given powerspectrum
+    """
+    
+    lmax=H.Alm.getlmax(alen(alm))
+    assert lmax<alen(wl), "Please provide smoothing kernel to higher lmax"
+    alm2 = alm.copy()
+    for (l,w) in zip(range(lmax),wl[:lmax]): 
+        alm2[H.Alm.getidx(lmax, l, arange(0,l+1)) % alen(alm)] *= w
+    
+    return alm2
 
 def skycut_mask(nside,percent,dth=deg2rad(10),taper_fn=lambda x: cos(pi*(x-1)/4)**2):
     """
@@ -293,38 +304,6 @@ def skycut_mask(nside,percent,dth=deg2rad(10),taper_fn=lambda x: cos(pi*(x-1)/4)
     return mask
 
 
-def get_mask_info(maskstr):
-    """
-    Given the mask line in the parameter file like '70% + ptsrc.fits'
-    returns a dict with the names of the .mll, .imll, .mll2, and .imll2 files 
-    and the percentage
-    """
-    
-    (percent,maskfile) = re.match("(?:([0-9]+)%\s*\+\s*)?(.*)",maskstr).groups()
-    if percent==None: percent=0
-    
-    ret = dict([("mask_"+post,maskfile+"."+percent+"."+post) for post in ["mll","imll","mll2","imll2"]])
-    ret["mask_percent"]=percent
-    ret["mask_file"]=maskfile
-    
-    return ret
-    
-    
-def get_mask(maskstr,Nside=None):
-    """
-    Given the mask line in the parameter file like '70% + ptsrc.fits'
-    returns the healpix mask.
-    
-    If Nside is present, upgrades/degrades the map to the given Nside
-    """
-    params = get_mask_info(maskstr)
-    mask = H.read_map(params["mask_file"])
-    if (Nside==None): Nside = H.npix2nside(alen(mask))
-    else: mask = H.ud_grade(mask,Nside)
-    if params["mask_percent"]!=0: mask*=skycut_mask(Nside, float(params["mask_percent"])/100.)
-    return mask
-
-
 def get_bin_func(binstr):
     """
     Returns a binning function bin(x) where x can be either a vector, matrix, or slice object. 
@@ -335,7 +314,7 @@ def get_bin_func(binstr):
     
     if (binstr=='wmap'): 
         wmap=loadtxt(os.path.join(AProotdir,"dat/external/wmap_binned_tt_spectrum_7yr_v4p1.txt"))
-        wmapbins=[slice(s,e+1) for [s,e] in wmap[:-2,[1,2]]]+[slice(l,l+50) for l in range(1001,3000,50)]
+        wmapbins=[slice(s,e+1) for [s,e] in wmap[:-2,[1,2]]]+[slice(l,l+50) for l in range(1001,2000,50)]+[slice(l,l+200) for l in range(2001,3000,200)]
         def wmapbin(cl):
             if type(cl)==slice: raise NotImplementedError("Can't slice WMAP bins yet")
             else:
@@ -381,7 +360,7 @@ def load_pcls(params):
     spectra = SymmetricTensorDict(rank=2)
     for f in os.listdir(params["pcls"]):
         (a,b) = tuple(MapID(*s.split("-")) for s in f.replace(".dat","").split("__"))
-        pcl = loadtxt(os.path.join(params["pcls"],f))[:lmax]
+        pcl = load_multi(os.path.join(params["pcls"],f))[:lmax]
         assert alen(pcl)>=lmax, "Pseudo-cl's have not been calculated to high enough lmax. Please run maps_to_pcls.py again." 
         spectra[(a,b)] = bin(pcl)
     return PowerSpectra(spectra,None,ells)
@@ -390,24 +369,10 @@ def load_pcls(params):
 
 def load_beams(params):
     params = read_AP_ini(params)
-    bin = params["pcl_binning"]
     regex=re.compile("(100|143|217|353).*?([1-8][abc]?)")
     files = [(os.path.join(params["beams"],f),regex.search(f)) for f in os.listdir(params["beams"])]
-    return dict([(MapID(r.group(1),'T',r.group(2)),loadtxt(f)[:int(params["lmax"]),1]) for (f,r) in files if r!=None])
-    
-def load_chain_params(params):
-    class dp(type(params)):
-        def __setitem__(self,k,v):
-            super(dp,self).__setitem__(k,v)
-            signal_to_params.camb_derived(self)
-
-    params = read_AP_ini(params)
-    params = mcmc.get_processed_params(params)
-    signal_to_params.init(params)
-    params.__setitem__
-    
-    return params
-    
+    return dict([(MapID(r.group(1),'T',r.group(2)),load_multi(f)[:int(params["lmax"]),params.get("beam_col",1)]) for (f,r) in files if r!=None])
+        
 def cmb_orient(wmap=True,spt=True):
     if (wmap):
         wmap = loadtxt(os.path.join(AProotdir,"dat/external/wmap_binned_tt_spectrum_7yr_v4p1.txt"))
@@ -415,4 +380,11 @@ def cmb_orient(wmap=True,spt=True):
     if (spt):
         spt = loadtxt(os.path.join(AProotdir,"dat/external/dl_spt20082009.txt"))
         errorbar(spt[:,0],spt[:,1],yerr=spt[:,2],fmt='.',label='SPT K11')
+
+def confint2d(hist,which):
+    H=sort(hist.ravel())[::-1]
+    sumH=sum(H)
+    cdf=array([sum(H[H>x])/sumH for x in H])
+    return interp(which,cdf,H)
+
 

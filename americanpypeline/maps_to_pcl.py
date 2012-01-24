@@ -52,7 +52,7 @@ if __name__=="__main__":
     maps = sorted([(m,[i.group(1) for i in id]) for (m,id) in [(m,[id.search(m) for id in ids]) for m in maps] if None not in id])
     
     # Other options
-    mask = get_mask(params["mask"])
+    mask = H.read_map(params["mask"])
     fsky = sum(mask)/alen(mask)
     lmax = params["lmax"]
     ells = arange(lmax)
@@ -65,7 +65,6 @@ if __name__=="__main__":
     def maps2alm((file,det)):
         print "Process "+str(get_mpi_rank())+" is transforming '"+file+"'"
         mp = H.read_map(file)
-        mp[mp<-1e30]=0
         if mask!=None: mp*=mask
         det.insert(1,"T") #For now just T maps, in future we'll have either separate files or 3 columns, handled here
         return (file,det,H.map2alm(mp,lmax=lmax))
@@ -77,6 +76,6 @@ if __name__=="__main__":
     
     def almpair2ps((alm1,alm2,output)):
         print "Process "+str(get_mpi_rank())+" is calculating '"+output+"'"
-        savetxt(output,alm2cl(alm1,alm2)*(ells*(ells+1))/(2*pi)*1e12/H.pixwin(params["nside"])[:lmax]**2)
+        savetxt(output,alm2cl(alm1,alm2)*(ells*(ells+1))/(2*pi)*1e12)#/H.pixwin(params["nside"])[:lmax]**2)
 
     mpi_map(almpair2ps,almpairs)

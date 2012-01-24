@@ -24,10 +24,10 @@ from americanpypeline import *
 import sys, os, re
 from numpy import *
 from numpy.linalg import norm
-from collections import namedtuple
+from collections import namedtuple, defaultdict
 from utils import *
-from scipy.optimize import fmin
 from l3l4sum import l3l4sum
+l3l4sum = l3l4sum.l3l4_sum_single
 from bisect import bisect_right
 
 
@@ -67,16 +67,12 @@ if __name__=="__main__":
     bin = params["pcl_binning"]
     ells = bin(arange(lmax))
     
-    beam = load_beams(params)
-    def weight(a,b): return 0 if a==b else 1
-    def noise(a): return 0
-    
     # Load mode coupling matrices
     if (is_mpi_master()): print "Loading mode coupling matrices..."
-    imll = load_multi(params["mask_imll"])
+    imll = load_multi(params["mask"]+".imll")
     assert alen(imll)>=lmax, "The mode-coupling matrix has not been calculated to high enough lmax. Please run mask_to_mll.py again."
     imll = imll[:lmax,:lmax]
-    gll2 = load_multi(params["mask_mll2"])[:lmax,:lmax]/(2*arange(lmax)+1)
+    gll2 = load_multi(params["mask"]+".mll2")[:lmax,:lmax]/(2*arange(lmax)+1)
     
     # Could certainly do something smarter than this:
     dbmode = int(params["dlmode"])/int(max(ells[1:]-ells[:-1]))
@@ -84,8 +80,15 @@ if __name__=="__main__":
     # The raw pseudo-C_ells
     if (is_mpi_master()): print "Loading pseudo-cl's..."
     pcls = load_pcls(params)
-#    maps = flatten([[m for m in pcls.get_maps() if m.fr==fr][:4] for fr in  freqs])
+#    maps = flatten([[m for m in pcls.get_maps() if m.fr==fr][:2] for fr in  freqs])
     maps = [m for m in pcls.get_maps() if m.fr in freqs]
+    
+    freqs = params["freqs"].split() if params["freqs"] else set(m.fr for m in maps)
+    
+    beam = load_beams(params) if params.get("beams",None) else {m:1 for m in maps}
+    def weight(a,b): return 0 if a==b else 1#return 0 if (a==b or (a.fr==b.fr and a.id[0]==b.id[0])) else 1
+    def noise(a): return 0
+
     if set(maps) - set(beam.keys()):
         print "Warning: Missing beams for the following detectors: \n"+str(set(maps) - set(beam.keys()))+"\
                \nContinuing without those maps."
@@ -93,16 +96,15 @@ if __name__=="__main__":
     
         
     #Equation (4), the per detector signal estimate
+    print "Calculating per-detector signal..."
     hat_cls_det = PowerSpectra(ells=ells)
     for (a,b) in pairs(maps): hat_cls_det[(a,b)] = bin((dot(imll,pcls[(a,b)]) - (noise(a) if a==b else 0))/(beam[a]*beam[b]))
 
     # Do per detector calibration
+    print "Fitting calibration factors..."
     calib = dict(flatten([[(m,a) for (m,[(_,a)]) in hat_cls_det.calibrated([m for m in maps if m.fr==fr], bin(slice(150,300))) if m.fr==fr] for fr in freqs]))
     for (a,b) in pairs(maps): hat_cls_det[(a,b)] *= calib[a]*calib[b]
 
-    # The fiducial model for the mask deconvolved Cl's which gets used in the covariance
-    fid_cls = PowerSpectra(ells=ells)
-    for (a,b) in pairs(maps): fid_cls[(a,b)] = bin(smooth(dot(imll,pcls[(a,b)]),window_len=50))*calib[a]*calib[b]
     
     # Equation (6), the per frequency signal estimate
     if (is_mpi_master()): print "Calculating signal..."
@@ -116,6 +118,12 @@ if __name__=="__main__":
                 for (a,b) in pairs(maps) if a.fr==alpha and b.fr==beta
             )
     
+    # The fiducial model for the mask deconvolved Cl's which gets used in the covariance
+    if (str2bool(params.get("get_det_covariance",False)) or str2bool(params.get("get_covariance",False))):
+        print "Calculating fiducial signal..."
+        fid_cls = PowerSpectra(ells=ells)
+        for (a,b) in pairs(maps): fid_cls[(a,b)] = bin(smooth(dot(imll,pcls[(a,b)]),window_len=50))*calib[a]*calib[b]
+
     if str2bool(params.get("get_det_covariance",False)):
         if (is_mpi_master()): print "Calculating detector covariance..."
         # Equation (7)
@@ -134,13 +142,15 @@ if __name__=="__main__":
         for ((alpha,beta),(gamma,delta)) in pairs(pairs(freqs)):
             if (is_mpi_master()): print "Calculating the "+str(((alpha,beta),(gamma,delta)))+" entry."
             def term(abcds):
-                return sum(
+                s = sum(
                     weight(a,b)*weight(c,d)
                     *l3l4sum(imll, fid_cls[(a,c)], fid_cls[(b,d)], fid_cls[(a,d)], fid_cls[(b,c)], gll2, dbmode)
                     *sum(outer(1/(beam[a]*beam[b]),1/(beam[c]*beam[d])) for ((a,b),(c,d)) in syms)
                     *calib[a]*calib[b]*calib[c]*calib[d]
                     for (((a,b),(c,d)),syms) in abcds
                 )
+                return s
+                
                 
             abcds=[(((a,b),(c,d)),[((a,b),(c,d)),((b,a),(c,d)),((a,b),(d,c)),((b,a),(d,c))]) 
                    for (a,b) in pairs(maps) for (c,d) in pairs(maps)

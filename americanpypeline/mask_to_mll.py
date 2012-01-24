@@ -39,7 +39,7 @@ if __name__=="__main__":
     print "Getting mode coupling for '"+params["mask"]+"'"
     
     #Create the healpix mask
-    mask = get_mask(params["mask"])
+    mask = H.read_map(params["mask"])
     
     #Read in other parameters
     lmax = int(params["lmax"])
@@ -62,5 +62,5 @@ if __name__=="__main__":
     
     #Save results
     for (post,mat) in [("mll",m),("imll",im),("mll2",m2),("imll2",im2)]: 
-        savetxt(params["mask_"+post],mat)
-        print "Saved '"+params["mask_"+post]+"'"
+        savetxt(params["mask"]+"."+post,mat)
+        print "Saved '"+params["mask"]+"."+post+"'"

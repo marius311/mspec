@@ -1,7 +1,7 @@
 import re, os
 from itertools import combinations_with_replacement, product
 from numpy import load, loadtxt, isfinite, float64, array, float32
-from matplotlib.pyplot import errorbar
+from matplotlib.pyplot import errorbar, legend, Line2D
 import itertools
 
 def_dtype = float64
@@ -170,7 +170,8 @@ def read_ini(file):
 
     return params
 
-
+def cust_legend(colors,labels,**kwargs):
+    legend([Line2D([0],[0],color=c) for c in colors],labels,**kwargs)
 
 """
 cookb_signalsmooth.py
