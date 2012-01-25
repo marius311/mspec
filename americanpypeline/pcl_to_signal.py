@@ -145,7 +145,11 @@ if __name__=="__main__":
                 s = sum(
                     weight(a,b)*weight(c,d)
                     *l3l4sum(imll, fid_cls[(a,c)], fid_cls[(b,d)], fid_cls[(a,d)], fid_cls[(b,c)], gll2, dbmode)
-                    *sum(outer(1/(beam[a]*beam[b]),1/(beam[c]*beam[d])) for ((a,b),(c,d)) in syms)
+                    *sum                
+                
+                
+                
+(outer(1/(beam[a]*beam[b]),1/(beam[c]*beam[d])) for ((a,b),(c,d)) in syms)
                     *calib[a]*calib[b]*calib[c]*calib[d]
                     for (((a,b),(c,d)),syms) in abcds
                 )

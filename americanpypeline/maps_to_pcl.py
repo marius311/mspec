@@ -76,6 +76,6 @@ if __name__=="__main__":
     
     def almpair2ps((alm1,alm2,output)):
         print "Process "+str(get_mpi_rank())+" is calculating '"+output+"'"
-        savetxt(output,alm2cl(alm1,alm2)*(ells*(ells+1))/(2*pi)*1e12)#/H.pixwin(params["nside"])[:lmax]**2)
+        savetxt(output,alm2cl(alm1,alm2)*1e12)#/H.pixwin(params["nside"])[:lmax]**2)
 
     mpi_map(almpair2ps,almpairs)
