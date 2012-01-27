@@ -16,6 +16,7 @@ freqs = ['143','217','353']
 MapID = namedtuple("MapID", ["fr","type","id"])
 MapID.__str__ = MapID.__repr__ = lambda self: "-".join(self)  
 
+def_map_regex = "(100|143|217|353).*?([1-8][abc]?)"
 
 
 class SymmetricTensorDict(dict):
@@ -314,7 +315,7 @@ def get_bin_func(binstr):
     
     if (binstr=='wmap'): 
         wmap=loadtxt(os.path.join(AProotdir,"dat/external/wmap_binned_tt_spectrum_7yr_v4p1.txt"))
-        wmapbins=[slice(s,e+1) for [s,e] in wmap[:-2,[1,2]]]+[slice(l,l+50) for l in range(1001,2000,50)]+[slice(l,l+200) for l in range(2001,3000,200)]
+        wmapbins=[slice(s,e+1) for [s,e] in wmap[:-2,[1,2]]]+[slice(l,l+50) for l in range(1001,2000,50)]+[slice(l,l+200) for l in range(2001,4000,200)]
         def wmapbin(cl):
             if type(cl)==slice: raise NotImplementedError("Can't slice WMAP bins yet")
             else:

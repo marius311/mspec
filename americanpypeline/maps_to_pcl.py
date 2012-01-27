@@ -45,11 +45,9 @@ if __name__=="__main__":
     params = read_AP_ini(sys.argv[1])
     
     # Read map file names
-    maps = [os.path.join(params["maps"],f) for f in os.listdir(params["maps"]) if f.rfind(".fits")!=-1]
-    
-    # Get frequency/detector id from each map file name
-    ids = [re.compile(params.get(k,d)) for (k,d) in [("map_freq_regex","(100|143|217|353)"),("map_det_regex","-([1-8][abc]?)_")]]
-    maps = sorted([(m,[i.group(1) for i in id]) for (m,id) in [(m,[id.search(m) for id in ids]) for m in maps] if None not in id])
+    regex = re.compile(params.get("map_regex",def_map_regex))
+    maps = [(os.path.join(params["maps"],f),regex.search(f)) for f in os.listdir(params["maps"]) if ".fits" in f]
+    maps = sorted([(f,(r.group(1),'T',r.group(2))) for (f,r) in maps])
     
     # Other options
     mask = H.read_map(params["mask"])
