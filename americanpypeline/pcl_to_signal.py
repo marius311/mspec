@@ -83,11 +83,15 @@ if __name__=="__main__":
     maps = flatten([[m for m in pcls.get_maps() if m.fr==fr][:2] for fr in  freqs])
     maps = [m for m in pcls.get_maps() if m.fr in freqs]
     
-    freqs = params["freqs"].split() if params["freqs"] else set(m.fr for m in maps)
+    freqs = set(m.fr for m in maps)
+    if params.get("freqs"): freqs &= set(params["freqs"].split())
     
     beam = load_beams(params) if params.get("beams",None) else {m:1 for m in maps}
-    def weight(a,b): return 0 if a==b else 1#return 0 if (a==b or (a.fr==b.fr and a.id[0]==b.id[0])) else 1
-    def noise(a): return 0
+    noise = load_noise(params) if params.get("noise",None) else {m:0 for m in maps}
+    if params.get("use_auto_spectra",False): 
+        def weight(a,b): return 1
+    else:
+        def weight(a,b): return 0 if a==b else 1
 
     if set(maps) - set(beam.keys()):
         print "Warning: Missing beams for the following detectors: \n"+str(set(maps) - set(beam.keys()))+"\
@@ -98,7 +102,7 @@ if __name__=="__main__":
     #Equation (4), the per detector signal estimate
     print "Calculating per-detector signal..."
     hat_cls_det = PowerSpectra(ells=ells)
-    for (a,b) in pairs(maps): hat_cls_det[(a,b)] = bin((dot(imll,pcls[(a,b)]) - (noise(a) if a==b else 0))/(beam[a]*beam[b]))
+    for (a,b) in pairs(maps): hat_cls_det[(a,b)] = bin((dot(imll,pcls[(a,b)]) - (noise[a] if a==b else 0))/(beam[a]*beam[b]))
 
     # Do per detector calibration
     print "Fitting calibration factors..."

@@ -376,6 +376,12 @@ def load_beams(params):
     files = [(os.path.join(params["beams"],f),regex.search(f)) for f in os.listdir(params["beams"])]
     return dict([(MapID(r.group(1),'T',r.group(2)),load_multi(f)[:int(params["lmax"]),params.get("beam_col",1)]) for (f,r) in files if r!=None])
         
+def load_noise(params):
+    params = read_AP_ini(params)
+    regex=re.compile("(100|143|217|353).*?([1-8][abc]?)")
+    files = [(os.path.join(params["noise"],f),regex.search(f)) for f in os.listdir(params["noise"])]
+    return dict([(MapID(r.group(1),'T',r.group(2)),load_multi(f)[:int(params["lmax"]),params.get("noise_col",1)]) for (f,r) in files if r!=None])
+        
 def cmb_orient(wmap=True,spt=True):
     if (wmap):
         wmap = loadtxt(os.path.join(AProotdir,"dat/external/wmap_binned_tt_spectrum_7yr_v4p1.txt"))

@@ -47,7 +47,7 @@ if __name__=="__main__":
     # Read map file names
     regex = re.compile(params.get("map_regex",def_map_regex))
     maps = [(os.path.join(params["maps"],f),regex.search(f)) for f in os.listdir(params["maps"]) if ".fits" in f]
-    maps = sorted([(f,(r.group(1),'T',r.group(2))) for (f,r) in maps])
+    maps = sorted([(f,[r.group(1),r.group(2)]) for (f,r) in maps])
     
     # Other options
     mask = H.read_map(params["mask"])

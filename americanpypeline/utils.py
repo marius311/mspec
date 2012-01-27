@@ -149,8 +149,7 @@ def read_ini(file):
             
         def get(self, key, default=None):
             if self.has_key(key): return self[key]
-            elif default!=None: return default
-            else: raise self.key_error(key)
+            else: return default
             
         def __getitem__(self, key):
             try: return dict.__getitem__(self, key)
