@@ -16,6 +16,7 @@ freqs = ['143','217','353']
 MapID = namedtuple("MapID", ["fr","type","id"])
 MapID.__str__ = MapID.__repr__ = lambda self: "-".join(self)  
 
+def_map_regex = "(100|143|217|353).*?([1-8][abc]?)"
 
 
 class SymmetricTensorDict(dict):
