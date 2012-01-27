@@ -314,7 +314,7 @@ def get_bin_func(binstr):
     
     if (binstr=='wmap'): 
         wmap=loadtxt(os.path.join(AProotdir,"dat/external/wmap_binned_tt_spectrum_7yr_v4p1.txt"))
-        wmapbins=[slice(s,e+1) for [s,e] in wmap[:-2,[1,2]]]+[slice(l,l+50) for l in range(1001,2000,50)]+[slice(l,l+200) for l in range(2001,3000,200)]
+        wmapbins=[slice(s,e+1) for [s,e] in wmap[:-2,[1,2]]]+[slice(l,l+50) for l in range(1001,2000,50)]+[slice(l,l+200) for l in range(2001,4000,200)]
         def wmapbin(cl):
             if type(cl)==slice: raise NotImplementedError("Can't slice WMAP bins yet")
             else:
@@ -336,19 +336,21 @@ def get_bin_func(binstr):
     raise ValueError("Unknown binning function '"+binstr+"'")
 
 
-def load_signal(params, clean=False, calib=False, calibrange=slice(150,300)):
+def load_signal(params, clean=False, calib=False, calibrange=slice(150,800)):
     params = read_AP_ini(params)
     ells = arange(params["lmax"])
     spectra = load_multi(params["signal"]+"_spec")[:,1]
-    try: cov = load_multi(params["signal"]+"_cov")
-    except IOError: cov = None
+    cov = None
+    if str2bool(params.get("get_covariance",False)):
+        try: cov = load_multi(params["signal"]+"_cov")
+        except IOError: pass
     signal = PowerSpectra(spectra, cov, ells, freqs)
     if clean and params["cleaning"]!=None: signal = signal.lincombo(params["cleaning"])
     if calib: signal = signal.lincombo(signal.calibrated(signal.get_maps(),params["pcl_binning"](calibrange)),normalize=False)
     return signal
 
 
-def load_clean_calib_signal(params,calibrange=slice(150,300)):
+def load_clean_calib_signal(params,calibrange=slice(150,800)):
     return load_signal(params, True, True, calibrange)
 
 

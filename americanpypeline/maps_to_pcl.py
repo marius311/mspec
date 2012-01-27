@@ -50,6 +50,7 @@ if __name__=="__main__":
     # Get frequency/detector id from each map file name
     ids = [re.compile(params.get(k,d)) for (k,d) in [("map_freq_regex","(100|143|217|353)"),("map_det_regex","-([1-8][abc]?)_")]]
     maps = sorted([(m,[i.group(1) for i in id]) for (m,id) in [(m,[id.search(m) for id in ids]) for m in maps] if None not in id])
+    print maps
     
     # Other options
     mask = H.read_map(params["mask"])

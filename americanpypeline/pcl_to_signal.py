@@ -80,7 +80,7 @@ if __name__=="__main__":
     # The raw pseudo-C_ells
     if (is_mpi_master()): print "Loading pseudo-cl's..."
     pcls = load_pcls(params)
-#    maps = flatten([[m for m in pcls.get_maps() if m.fr==fr][:2] for fr in  freqs])
+    maps = flatten([[m for m in pcls.get_maps() if m.fr==fr][:2] for fr in  freqs])
     maps = [m for m in pcls.get_maps() if m.fr in freqs]
     
     freqs = params["freqs"].split() if params["freqs"] else set(m.fr for m in maps)
