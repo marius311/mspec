@@ -314,6 +314,17 @@ def get_bin_func(binstr):
     
     if (binstr=="none"): return lambda x: x
     
+    if (binstr=="ctp"):
+        ctp=loadtxt(os.path.join(AProotdir,"dat/bins/CTP_bin_TT_orig"))
+        ctpbins=[slice(s,e+1) for [s,e] in ctp[:,[1,2]]]
+        def ctpbin(cl):
+            if type(cl)==slice: raise NotImplementedError("Can't slice CTP bins yet")
+            else:
+                bins = ctpbins[:bisect_right([s.start for s in ctpbins],len(cl))-1]
+                binned = array([mean(cl[s],axis=0) for s in bins])
+                return binned if len(shape(cl))==1 else array(map(lambda cl: ctpbin(cl),binned))
+        return ctpbin
+    
     if (binstr=='wmap'): 
         wmap=loadtxt(os.path.join(AProotdir,"dat/external/wmap_binned_tt_spectrum_7yr_v4p1.txt"))
         wmapbins=[slice(s,e+1) for [s,e] in wmap[:-2,[1,2]]]+[slice(l,l+50) for l in range(1001,2000,50)]+[slice(l,l+200) for l in range(2001,4000,200)]
