@@ -72,7 +72,7 @@ if __name__=="__main__":
     imll = load_multi(params["mask"]+".imll")
     assert alen(imll)>=lmax, "The mode-coupling matrix has not been calculated to high enough lmax. Please run mask_to_mll.py again."
     imll = imll[:lmax,:lmax]
-    gll2 = load_multi(params["mask"]+".mll2")[:lmax,:lmax]/(2*arange(lmax)+1)
+    if str2bool(params.get("get_covariance","F")): gll2 = load_multi(params["mask"]+".mll2")[:lmax,:lmax]/(2*arange(lmax)+1)
     
     # Could certainly do something smarter than this:
     dbmode = int(params["dlmode"])/int(max(ells[1:]-ells[:-1]))

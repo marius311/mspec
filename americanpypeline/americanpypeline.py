@@ -16,7 +16,7 @@ freqs = ['143','217','353']
 MapID = namedtuple("MapID", ["fr","type","id"])
 MapID.__str__ = MapID.__repr__ = lambda self: "-".join(self)  
 
-def_map_regex = "(100|143|217|353).*?([1-8][abc]?)"
+def_map_regex = "(100|143|217|353).*?([0-9][abc]?)"
 
 
 class SymmetricTensorDict(dict):
@@ -372,13 +372,13 @@ def load_pcls(params):
 
 def load_beams(params):
     params = read_AP_ini(params)
-    regex=re.compile("(100|143|217|353).*?([1-8][abc]?)")
+    regex=re.compile(params.get("map_regex",def_map_regex))
     files = [(os.path.join(params["beams"],f),regex.search(f)) for f in os.listdir(params["beams"])]
     return dict([(MapID(r.group(1),'T',r.group(2)),load_multi(f)[:int(params["lmax"]),params.get("beam_col",1)]) for (f,r) in files if r!=None])
         
 def load_noise(params):
     params = read_AP_ini(params)
-    regex=re.compile("(100|143|217|353).*?([1-8][abc]?)")
+    regex=re.compile(params.get("map_regex",def_map_regex))
     files = [(os.path.join(params["noise"],f),regex.search(f)) for f in os.listdir(params["noise"])]
     return dict([(MapID(r.group(1),'T',r.group(2)),load_multi(f)[:int(params["lmax"]),params.get("noise_col",1)]) for (f,r) in files if r!=None])
         
