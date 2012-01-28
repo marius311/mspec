@@ -80,11 +80,9 @@ if __name__=="__main__":
     # The raw pseudo-C_ells
     if (is_mpi_master()): print "Loading pseudo-cl's..."
     pcls = load_pcls(params)
-    maps = flatten([[m for m in pcls.get_maps() if m.fr==fr][:2] for fr in  freqs])
+    freqs = params["freqs"].split()
+    assert not set(freqs)-set(m.fr for m in pcls.get_maps()), "Couldn't find pseudo-cl's for all the desired frequencies: "+freqs
     maps = [m for m in pcls.get_maps() if m.fr in freqs]
-    
-    freqs = set(m.fr for m in maps)
-    if params.get("freqs"): freqs &= set(params["freqs"].split())
     
     beam = load_beams(params) if params.get("beams",None) else {m:1 for m in maps}
     noise = load_noise(params) if params.get("noise",None) else {m:0 for m in maps}

@@ -10,9 +10,6 @@ from utils import *
 import healpy as H
 import sys, os, re, gc
 
-
-freqs = ['143','217','353']
-
 MapID = namedtuple("MapID", ["fr","type","id"])
 MapID.__str__ = MapID.__repr__ = lambda self: "-".join(self)  
 
@@ -227,6 +224,10 @@ class PowerSpectra():
         ps.ells = self.ells[s]
         return ps
     
+    def diffed(self,fid):
+        assert alen(fid)==alen(self.ells), "Must difference against power-spectrum with same number of ells"
+        return self.apply_func(lambda _, cl: cl-fid, lambda _,cov: cov)
+        
     def __add__(self,other):
         return PowerSpectra.sum([self,other])
 
@@ -345,7 +346,7 @@ def load_signal(params, clean=False, calib=False, calibrange=slice(150,800)):
     if str2bool(params.get("get_covariance",False)):
         try: cov = load_multi(params["signal"]+"_cov")
         except IOError: pass
-    signal = PowerSpectra(spectra, cov, ells, freqs)
+    signal = PowerSpectra(spectra, cov, ells, params["freqs"].split())
     if clean and params["cleaning"]!=None: signal = signal.lincombo(params["cleaning"])
     if calib: signal = signal.lincombo(signal.calibrated(signal.get_maps(),params["pcl_binning"](calibrange)),normalize=False)
     return signal
