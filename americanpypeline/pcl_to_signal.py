@@ -68,12 +68,16 @@ if __name__=="__main__":
     ells = bin(arange(lmax))
     
     # Load mode coupling matrices
-    if (is_mpi_master()): print "Loading mode coupling matrices..."
-    imll = load_multi(params["mask"]+".imll")
-    assert alen(imll)>=lmax, "The mode-coupling matrix has not been calculated to high enough lmax. Please run mask_to_mll.py again."
-    imll = imll[:lmax,:lmax]
-    if str2bool(params.get("get_covariance","F")): gll2 = load_multi(params["mask"]+".mll2")[:lmax,:lmax]/(2*arange(lmax)+1)
-    
+    if (params.get("mask")):
+        if (is_mpi_master()): print "Loading mode coupling matrices..."
+        imll = load_multi(params["mask"]+".imll")
+        assert alen(imll)>=lmax, "The mode-coupling matrix has not been calculated to high enough lmax. Please run mask_to_mll.py again."
+        imll = imll[:lmax,:lmax]
+        if str2bool(params.get("get_covariance","F")): gll2 = load_multi(params["mask"]+".mll2")[:lmax,:lmax]/(2*arange(lmax)+1)
+    else:
+        imll=1
+        gll2=diag(1./(2*arange(lmax)+1))
+        
     # Could certainly do something smarter than this:
     dbmode = int(params["dlmode"])/int(max(ells[1:]-ells[:-1]))
     
@@ -147,16 +151,11 @@ if __name__=="__main__":
                 s = sum(
                     weight(a,b)*weight(c,d)
                     *l3l4sum(imll, fid_cls[(a,c)], fid_cls[(b,d)], fid_cls[(a,d)], fid_cls[(b,c)], gll2, dbmode)
-                    *sum                
-                
-                
-                
-(outer(1/(beam[a]*beam[b]),1/(beam[c]*beam[d])) for ((a,b),(c,d)) in syms)
+                    *sum(outer(1/(beam[a]*beam[b]),1/(beam[c]*beam[d])) for ((a,b),(c,d)) in syms)
                     *calib[a]*calib[b]*calib[c]*calib[d]
                     for (((a,b),(c,d)),syms) in abcds
                 )
                 return s
-                
                 
             abcds=[(((a,b),(c,d)),[((a,b),(c,d)),((b,a),(c,d)),((a,b),(d,c)),((b,a),(d,c))]) 
                    for (a,b) in pairs(maps) for (c,d) in pairs(maps)
