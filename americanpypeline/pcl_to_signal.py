@@ -90,7 +90,7 @@ if __name__=="__main__":
     
     beam = load_beams(params) if params.get("beams",None) else {m:1 for m in maps}
     noise = load_noise(params) if params.get("noise",None) else {m:0 for m in maps}
-    if params.get("use_auto_spectra",False): 
+    if str2bool(params.get("use_auto_spectra")): 
         def weight(a,b): return 1
     else:
         def weight(a,b): return 0 if a==b else 1

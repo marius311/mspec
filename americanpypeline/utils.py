@@ -1,6 +1,6 @@
 import re, os
 from itertools import combinations_with_replacement, product
-from numpy import load, loadtxt, isfinite, float64, array, float32
+from numpy import load, loadtxt, isfinite, float64, array, float32, alen, sqrt
 from matplotlib.pyplot import errorbar, legend, Line2D
 import itertools
 
@@ -171,6 +171,13 @@ def read_ini(file):
 
 def cust_legend(colors,labels,**kwargs):
     legend([Line2D([0],[0],color=c) for c in colors],labels,**kwargs)
+
+def corrify(m):
+    m2=m.copy()
+    for i in range(alen(m)): 
+        m2[i,:]/=sqrt(m[i,i])
+        m2[:,i]/=sqrt(m[i,i])
+    return m2
 
 """
 cookb_signalsmooth.py

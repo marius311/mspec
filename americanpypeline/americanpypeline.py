@@ -1,7 +1,7 @@
 from ast import literal_eval
 from bisect import bisect_right
 from collections import namedtuple
-from matplotlib.pyplot import plot, errorbar, contour, yscale
+from matplotlib.pyplot import plot, errorbar, contour, yscale as ppyscale, xscale as ppxscale
 from matplotlib.mlab import movavg
 from numpy import *
 from numpy.linalg import norm
@@ -183,7 +183,7 @@ class PowerSpectra():
         
         return PowerSpectra(spectra,cov,self.ells)
     
-    def plot(self,which=None,errorbars=True,prefix="",**kwargs):
+    def plot(self,which=None,errorbars=True,prefix="",yscale='linear',xscale='linear',**kwargs):
         if (which==None): which = pairs(self.get_maps())
         if errorbars and self.cov:
             for (a,b) in which:
@@ -192,7 +192,8 @@ class PowerSpectra():
         else:
             for (a,b) in which:
                 plot(self.ells,self.spectra[(a,b)],label=prefix+str(a)+" x "+str(b),**kwargs)
-        yscale("log")
+        ppyscale(yscale)
+        ppxscale(xscale)
 
 
     def apply_func(self,fspec,fcov):

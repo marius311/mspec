@@ -47,24 +47,28 @@ if __name__=="__main__":
     # Read map file names
     regex = re.compile(params.get("map_regex",def_map_regex))
     maps = [(os.path.join(params["maps"],f),regex.search(f)) for f in os.listdir(params["maps"]) if ".fits" in f]
-    maps = sorted([(f,[r.group(1),r.group(2)]) for (f,r) in maps])
+    maps = sorted([(f,[r.group(1),r.group(2)]) for (f,r) in maps if r])
     
     # Other options
-    mask = H.read_map(params["mask"])
-    fsky = sum(mask)/alen(mask)
+    mask = H.read_map(params["mask"]) if params.get("mask") else None
     lmax = params["lmax"]
     ells = arange(lmax)
     
     # Get nside from the first map and make sure the mask is the same
-    params["nside"]=H.npix2nside(pyfits.open(maps[0][0])[1].data.shape[0])*32
-    if (H.npix2nside(alen(mask))!=params["nside"]): mask = H.ud_grade(mask,params["nside"])
+    # params["nside"]=H.npix2nside(pyfits.open(maps[0][0])[1].data.shape[0])*32
+    params["nside"]=2048
+    if (mask!=None and H.npix2nside(alen(mask))!=params["nside"]): mask = H.ud_grade(mask,params["nside"])
 
     # Get the alm's of each map
     def maps2alm((file,det)):
         print "Process "+str(get_mpi_rank())+" is transforming '"+file+"'"
         mp = H.read_map(file)
         if mask!=None: mp*=mask
+        if (len(mp[mp<-1e20])!=0):
+            print "Warning: Setting remaining UNSEEN pixels after masking to 0 in "+file
+            mp[mp<-1e20]=0
         det.insert(1,"T") #For now just T maps, in future we'll have either separate files or 3 columns, handled here
+        print det, min(mp), max(mp)
         return (file,det,H.map2alm(mp,lmax=lmax))
         
     alms = mpi_map(maps2alm,maps,distribute=True)    
