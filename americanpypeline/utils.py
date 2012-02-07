@@ -3,6 +3,7 @@ from itertools import combinations_with_replacement, product
 from numpy import load, save, loadtxt, isfinite, float64, array, float32, alen, sqrt
 from matplotlib.pyplot import errorbar, legend, Line2D
 import itertools
+import traceback
 
 def_dtype = float64
 
@@ -46,6 +47,15 @@ def get_mpi_size():
     except:
         return 1
 
+
+def norecurse(f):
+    def func(*args, **kwargs):
+        if len([l[2] for l in traceback.extract_stack() if l[2] == f.func_name]) > 0:
+            raise Exception, 'Recursed'
+            return f(*args, **kwargs)
+    return func
+
+    
     
 def mpi_map(function,sequence,distribute=False):
     """
@@ -56,13 +66,17 @@ def mpi_map(function,sequence,distribute=False):
     If distribute is set to true, every process receives the answer
     otherwise (default) only the root process does.
     """
-    try:
-        from mpi4py import MPI
-        comm = MPI.COMM_WORLD
-        (rank,size) = (comm.Get_rank(),comm.Get_size())
-    except Exception as e:
-        print e.message
+    if len([l[2] for l in traceback.extract_stack() if l[2] == 'mpi_map']) > 0:
+        print "mpi_map called recursively, only using MPI for top level"
         (rank,size) = (0,1)
+    else:
+        try:
+            from mpi4py import MPI
+            comm = MPI.COMM_WORLD
+            (rank,size) = (comm.Get_rank(),comm.Get_size())
+        except Exception as e:
+            print e.message
+            (rank,size) = (0,1)
         
     if (size==1):
         return map(function,sequence)
