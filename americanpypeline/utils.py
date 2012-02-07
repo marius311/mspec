@@ -4,6 +4,7 @@ from numpy import load, save, loadtxt, isfinite, float64, array, float32, alen, 
 from matplotlib.pyplot import errorbar, legend, Line2D
 import itertools
 import traceback
+from collections import namedtuple
 
 def_dtype = float64
 
@@ -26,37 +27,31 @@ def get_num_threads():
         return 1
 
 
+def get_mpi():
+    if len([l[2] for l in traceback.extract_stack() if l[2] == 'mpi_map']) > 1:
+        (rank,size,comm) = (0,1,None)
+    else:
+        try:
+            from mpi4py import MPI
+            comm = MPI.COMM_WORLD
+            (rank,size) = (comm.Get_rank(),comm.Get_size())
+        except Exception as e:
+            print e.message
+            (rank,size,comm) = (0,1,None)
+            
+    return namedtuple('mpi',['rank','size','comm'])(rank,size,comm)
+
+
 def is_mpi_master():
-    try:
-        from mpi4py import MPI
-        return MPI.COMM_WORLD.Get_rank()==0
-    except:
-        return True
+    return get_mpi_rank()==0
 
 def get_mpi_rank():
-    try:
-        from mpi4py import MPI
-        return MPI.COMM_WORLD.Get_rank()
-    except:
-        return 0
+    return get_mpi().rank
     
 def get_mpi_size():
-    try:
-        from mpi4py import MPI
-        return MPI.COMM_WORLD.Get_size()
-    except:
-        return 1
+    return get_mpi().size
 
 
-def norecurse(f):
-    def func(*args, **kwargs):
-        if len([l[2] for l in traceback.extract_stack() if l[2] == f.func_name]) > 0:
-            raise Exception, 'Recursed'
-            return f(*args, **kwargs)
-    return func
-
-    
-    
 def mpi_map(function,sequence,distribute=False):
     """
     map parallelized with MPI
@@ -65,18 +60,9 @@ def mpi_map(function,sequence,distribute=False):
     each MPI process does the rank-th one
     If distribute is set to true, every process receives the answer
     otherwise (default) only the root process does.
+    If this function is called recursively, only the first call will be parallelized
     """
-    if len([l[2] for l in traceback.extract_stack() if l[2] == 'mpi_map']) > 0:
-        print "mpi_map called recursively, only using MPI for top level"
-        (rank,size) = (0,1)
-    else:
-        try:
-            from mpi4py import MPI
-            comm = MPI.COMM_WORLD
-            (rank,size) = (comm.Get_rank(),comm.Get_size())
-        except Exception as e:
-            print e.message
-            (rank,size) = (0,1)
+    (rank,size,comm) = get_mpi()
         
     if (size==1):
         return map(function,sequence)
