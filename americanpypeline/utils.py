@@ -1,6 +1,6 @@
 import re, os
 from itertools import combinations_with_replacement, product
-from numpy import load, loadtxt, isfinite, float64, array, float32, alen, sqrt
+from numpy import load, save, loadtxt, isfinite, float64, array, float32, alen, sqrt
 from matplotlib.pyplot import errorbar, legend, Line2D
 import itertools
 
@@ -81,9 +81,9 @@ def load_multi(path):
     elif os.path.exists(path): return loadtxt(path,dtype=def_dtype)
     else: raise IOError("No such file or directory: "+path+".npy or "+path)
 
-def save_multi(path,dat):
-    raise NotImplementedError()
-    
+def save_multi(path,dat,npy=True):
+    if npy: save(path, array(dat,dtype=float32))
+    else: savetxt(path,dat)
     
 def proc_map(function,sequence,nthreads=get_num_threads()):
     q = Queue()

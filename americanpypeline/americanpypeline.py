@@ -125,8 +125,8 @@ class PowerSpectra():
 
     def save_as_matrix(self,fileroot):
         spec_mat, cov_mat = self.get_as_matrix()
-        savetxt(fileroot+"_spec",spec_mat,fmt="%8.2f %.5e")
-        if cov_mat!=None: savetxt(fileroot+"_cov",cov_mat)    
+        save_multi(fileroot+"_spec",spec_mat)
+        if cov_mat!=None: save_multi(fileroot+"_cov",cov_mat)    
     
     def save_as_files(self,fileroot):
         raise NotImplementedError
