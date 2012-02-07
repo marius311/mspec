@@ -31,38 +31,9 @@ l3l4sum = l3l4sum.l3l4_sum_single
 from bisect import bisect_right
 
 
-def py_l3l4sum(imll,Cac,Cbd,Cad,Cbc,gll2,dlmode):
-    """
-    Does the l3, l4 summation in Equation (8).
-    Returns a matrix indexed by l1 and l2 
+def main(params):
     
-    We spend basically 100% of the computation time in this function. Its the only
-    place worth optimizing. We could code this in Fortran in the future. Python should be good given
-    a reasonable delta_ell_bin and delta_ell_mode. 
-    """
-
-    lmax = alen(imll)
-    ans = zeros((lmax,lmax))
-    
-    for l1 in arange(lmax):
-        for l2 in arange(max(0,l1-dlmode),min(lmax,l1+dlmode+1)):
-            (l3,l4) = (slice(max(0,l1-dlmode),l1+dlmode+1),slice(max(0,l2-dlmode),l2+dlmode+1))
-            
-            ans[l1,l2] += dot(Cac[l3]*imll[l1,l3],dot(gll2[l3,l4],Cbd[l4]*imll[l2,l4])) 
-            ans[l1,l2] += dot(Cac[l4]*imll[l1,l4],dot(gll2[l4,l3],Cbd[l3]*imll[l2,l3])) 
-            ans[l1,l2] += dot(Cad[l3]*imll[l1,l3],dot(gll2[l3,l4],Cbc[l4]*imll[l2,l4])) 
-            ans[l1,l2] += dot(Cad[l4]*imll[l1,l4],dot(gll2[l4,l3],Cbc[l3]*imll[l2,l3])) 
-
-    return ans
-
-if __name__=="__main__":
-    
-    if (len(sys.argv) != 2): 
-        print "Usage: python mask_to_mll.py parameter_file.ini"
-        sys.exit()
-
-    params = read_AP_ini(sys.argv[1])
-    
+    params = read_AP_ini(params)
     lmax = params["lmax"]
     bin = params["pcl_binning"]
     ells = bin(arange(lmax))
@@ -168,3 +139,9 @@ if __name__=="__main__":
         
     
     if (is_mpi_master()): hat_cls_freq.save_as_matrix(params["signal"])
+
+
+if __name__=="__main__": 
+    
+    if (len(sys.argv) == 2): main(sys.argv[1])
+    else: print "Usage: python mask_to_mll.py parameter_file.ini"
