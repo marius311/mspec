@@ -138,7 +138,7 @@ def main(params):
             hat_cls_freq.cov[((alpha,beta),(gamma,delta))]=s
         
     
-    if (is_mpi_master()): hat_cls_freq.save_as_matrix(params["signal"])
+    hat_cls_freq.save_as_matrix(params["signal"])
 
 
 if __name__=="__main__": 

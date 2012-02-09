@@ -1,7 +1,7 @@
 from collections import namedtuple, defaultdict
 from americanpypeline import *
 from americanpypeline.utils import *
-import sys, os, re
+import sys, os, re, gc
 from numpy import *
 import healpy as H
 
@@ -24,16 +24,18 @@ mask = H.read_map('/global/homes/m/marius/workspace/americanpypeline/test/ctp3si
 lmax = 3000
 
 def work((i,d)):
-    i=str(i)
-    if not os.path.exists(os.path.join(outdir,i)):
-        os.mkdir(os.path.join(outdir,i))
-        print "Process "+str(get_mpi_rank())+" is doing "+i
+    outi = os.path.join(outdir,'%.5i'%i)
+    if not os.path.exists(outi):
+        print "Process "+str(get_mpi_rank())+" is doing realization "+str(i)
         cmb=H.read_map(d.cmb)
         noise = [H.read_map(n) for n in [d.noise1,d.noise2]]
+        for n in noise: n[n==H.UNSEEN]=0
         alm1, alm2 = [H.map2alm(mask*(cmb+n)*1.654*1e6,lmax=lmax) for n in noise]
         cls = [alm2cl(*p) for p in pairs([alm1,alm2])]
-        for ((i,j),cl) in zip([('a','a'),('a','b'),('b','b')],cls):
-            savetxt(os.path.join(outdir,i,'143-T-1'+i+'___-143-T-1'+j),cl)
+        os.mkdir(outi)
+        for ((i,j),cl) in zip([('0','0'),('0','1'),('1','1')],cls):
+            savetxt(os.path.join(outi,'143-T-'+i+'__143-T-'+j),cl)
+        gc.collect()
 
     
     

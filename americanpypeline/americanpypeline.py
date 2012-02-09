@@ -247,8 +247,8 @@ class PowerSpectra():
         assert all(ell == ells[0] for ell in ells), "Can't add spectra with different ells."
         maps = reduce(lambda x, y: x & y, [set(p.get_maps()) for p in ps])
         spectra = SymmetricTensorDict([(k,sum(p.spectra[k] for p in ps)) for k in pairs(maps)],rank=2)
-        #TODO: Add covariances
-        return PowerSpectra(spectra,None,ells[0])
+        cov = SymmetricTensorDict([(k,sum(p.cov[k] for p in ps)) for k in pairs(pairs(maps))],rank=4)
+        return PowerSpectra(spectra,cov,ells[0])
 
 
 def read_AP_ini(params):
@@ -350,12 +350,12 @@ def get_bin_func(binstr):
     raise ValueError("Unknown binning function '"+binstr+"'")
 
 
-def load_signal(params, clean=False, calib=False, calibrange=slice(150,800)):
+def load_signal(params, clean=False, calib=False, calibrange=slice(150,800), loadcov=True):
     params = read_AP_ini(params)
-    ells = arange(params["lmax"])
+    ells = get_bin_func(params.get("storage_binning","none"))(arange(params["lmax"]))
     spectra = load_multi(params["signal"]+"_spec")[:,1]
     cov = None
-    if str2bool(params.get("get_covariance",False)):
+    if loadcov and str2bool(params.get("get_covariance",False)):
         try: cov = load_multi(params["signal"]+"_cov")
         except IOError: pass
     signal = PowerSpectra(spectra, cov, ells, params["freqs"].split())
