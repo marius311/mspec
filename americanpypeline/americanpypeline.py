@@ -261,8 +261,7 @@ def read_AP_ini(params):
         p["lmax"]=int(p["lmax"])
         if "cleaning" in p: p["cleaning"]=[(outmap,[(str(inmap),coeff) for (inmap,coeff) in lc]) for (outmap,lc) in literal_eval(p["cleaning"]).items()]
         else: p["cleaning"]=None
-        p["pcl_binning"]=get_bin_func(p.get("pcl_binning","none"))
-        p["mcmc_binning"]=get_bin_func(p.get("mcmc_binning","none"))
+        p["binning"]=get_bin_func(p.get("binning","none"))
         return p
     else:
         return params
@@ -349,7 +348,7 @@ def load_signal(params, clean=False, calib=False, calibrange=slice(150,800), loa
         except IOError: pass
     signal = PowerSpectra(spectra, cov, ells, params["freqs"].split())
     if clean and params["cleaning"]!=None: signal = signal.lincombo(params["cleaning"])
-    if calib: signal = signal.lincombo(signal.calibrated(signal.get_maps(),params["pcl_binning"](calibrange)),normalize=False)
+    if calib: signal = signal.lincombo(signal.calibrated(signal.get_maps(),calibrange),normalize=False)
     return signal
 
 
@@ -359,15 +358,14 @@ def load_clean_calib_signal(params,calibrange=slice(150,800)):
 
 def load_pcls(params):
     params = read_AP_ini(params)
-    bin = params["pcl_binning"]
     lmax = params["lmax"]
-    ells = bin(arange(lmax))
+    ells = arange(lmax)
     spectra = SymmetricTensorDict(rank=2)
     for f in os.listdir(params["pcls"]):
         (a,b) = tuple(MapID(*s.split("-")) for s in f.replace(".dat","").split("__"))
         pcl = load_multi(os.path.join(params["pcls"],f))[:lmax]
         assert alen(pcl)>=lmax, "Pseudo-cl's have not been calculated to high enough lmax. Please run maps_to_pcls.py again." 
-        spectra[(a,b)] = bin(pcl)
+        spectra[(a,b)] = pcl
     return PowerSpectra(spectra,None,ells)
 
 
