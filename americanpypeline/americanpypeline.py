@@ -362,10 +362,14 @@ def load_pcls(params):
     ells = arange(lmax)
     spectra = SymmetricTensorDict(rank=2)
     for f in os.listdir(params["pcls"]):
-        (a,b) = tuple(MapID(*s.split("-")) for s in f.replace(".dat","").split("__"))
-        pcl = load_multi(os.path.join(params["pcls"],f))[:lmax]
-        assert alen(pcl)>=lmax, "Pseudo-cl's have not been calculated to high enough lmax. Please run maps_to_pcls.py again." 
-        spectra[(a,b)] = pcl
+        try:
+            (a,b) = tuple(MapID(*s.split("-")) for s in f.replace(".dat","").split("__"))
+            pcl = load_multi(os.path.join(params["pcls"],f))[:lmax]
+            assert alen(pcl)>=lmax, "Pseudo-cl's have not been calculated to high enough lmax. Please run maps_to_pcls.py again." 
+            spectra[(a,b)] = pcl
+        except: 
+            print "Error loading pseudo-Cl. Skipping "+os.path.join(params["pcls"],f)
+        
     return PowerSpectra(spectra,None,ells)
 
 
