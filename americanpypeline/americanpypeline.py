@@ -309,45 +309,34 @@ def skycut_mask(nside,percent,dth=deg2rad(10),taper_fn=lambda x: cos(pi*(x-1)/4)
 
 def get_bin_func(binstr):
     """
-    Returns a binning function bin(x) where x can be either a vector, matrix, or slice object. 
+    Returns a binning function bin(x,axis=None) where x can be any rank array and axis specifies the binning axis, or None for all axes 
     """
     binstr = binstr.lower()
     
     if (binstr=="none"): return lambda x: x
     
+    bindat = None
+    
     if (binstr=="ctp"):
-        ctp=loadtxt(os.path.join(AProotdir,"dat/bins/CTP_bin_TT_orig"))
-        ctpbins=[slice(s,e+1) for [s,e] in ctp[:,[1,2]]]
-        def ctpbin(cl):
-            if type(cl)==slice: raise NotImplementedError("Can't slice CTP bins yet")
-            else:
-                bins = ctpbins[:bisect_right([s.start for s in ctpbins],len(cl))-1]
-                binned = array([mean(cl[s],axis=0) for s in bins])
-                return binned if len(shape(cl))==1 else array(map(lambda cl: ctpbin(cl),binned))
-        return ctpbin
+        ctpbins=loadtxt(os.path.join(AProotdir,"dat/bins/CTP_bin_TT_orig"),dtype=int)
+        bindat=[arange(s,e+1) for [s,e] in ctpbins[:,[1,2]]]
     
     if (binstr=='wmap'): 
-        wmap=loadtxt(os.path.join(AProotdir,"dat/external/wmap_binned_tt_spectrum_7yr_v4p1.txt"))
-        wmapbins=[slice(s,e+1) for [s,e] in wmap[:-2,[1,2]]]+[slice(l,l+50) for l in range(1001,2000,50)]+[slice(l,l+200) for l in range(2001,4000,200)]
-        def wmapbin(cl):
-            if type(cl)==slice: raise NotImplementedError("Can't slice WMAP bins yet")
-            else:
-                bins = wmapbins[:bisect_right([s.start for s in wmapbins],len(cl))-1]
-                binned = array([mean(cl[s],axis=0) for s in bins])
-                return binned if len(shape(cl))==1 else array(map(lambda cl: wmapbin(cl),binned))
-        return wmapbin
-    
+        wmapbins=loadtxt(os.path.join(AProotdir,"dat/external/wmap_binned_tt_spectrum_7yr_v4p1.txt"),dtype=int)
+        bindat=[arange(s,e+1) for [s,e] in wmapbins[:-2,[1,2]]]+[arange(l,l+50) for l in range(1001,2000,50)]+[arange(l,l+200) for l in range(2001,4000,200)]
+
     r = re.match("flat\((?:dl=)?([0-9]+)\)",binstr)
     if (r!=None):
         dl=int(r.group(1))
-        def flatbin(cl):
-            if type(cl)==slice: return slice(cl.start/dl if cl.start else None,cl.stop/dl,cl.step/dl if cl.step else None)
-            else:
-                b = array([mean(cl[l:l+dl],axis=0) for l in dl*arange(alen(cl)/dl)])
-                return b if len(shape(cl))==1 else array(map(lambda cl: flatbin(cl),b))
-        return flatbin
+        bindat=[arange(l,l+dl) for l in dl*arange(10000/dl)]
     
-    raise ValueError("Unknown binning function '"+binstr+"'")
+    def bin(x,axis=None):
+        bins = bindat[:bisect_right([s[0] for s in bindat],len(x))-1]
+        for a in ([axis] if axis!=None else range(x.ndim)): x = array([x.take(s,axis=a).mean(axis=a) for s in bins]).swapaxes(a,0)
+        return x
+
+    if bindat!=None: return bin
+    else: raise ValueError("Unknown binning function '"+binstr+"'")
 
 
 def load_signal(params, clean=False, calib=False, calibrange=slice(150,800), loadcov=True):
