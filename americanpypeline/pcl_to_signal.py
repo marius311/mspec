@@ -89,18 +89,18 @@ if __name__=="__main__":
     if (str2bool(params.get("get_det_covariance",False)) or str2bool(params.get("get_covariance",False))):
         print "Calculating fiducial signal..."
         fid_cls = PowerSpectra(ells=ells)
-        for (a,b) in pairs(maps): fid_cls[(a,b)] = smooth(dot(imll,pcls[(a,b)]),window_len=50)*calib[a]*calib[b]
+        for (a,b) in pairs(maps): fid_cls[(a,b)] = smooth(dot(imll,pcls[(a,b)]),window_len=125)*calib[a]*calib[b]
 
     
     if str2bool(params.get("get_covariance",True)):
         if (is_mpi_master()): print "Calculating detector covariance..."
         for ((a,b),(c,d)) in pairs(pairs(maps)):
             if (is_mpi_master()): print "Calculating the "+str(((str(a),str(b)),(str(c),str(d))))+" entry."
-            #Equation (5)
+            # Equation (5)
             pclcov = (lambda x: x+x.T)(outer(fid_cls[(a,c)],fid_cls[(b,d)]) + outer(fid_cls[(a,d)],fid_cls[(b,c)]))*gll2/2
             # Equation (7)
             hat_cls_det.cov[((a,b),(c,d))] = \
-                    dot(bin(imll/transpose(beam[a]*beam[b]),axis=0),dot(pclcov,bin(imll.T/(beam[a]*beam[b]),axis=1))) \
+                    dot(bin(imll/transpose([beam[a]*beam[b]]),axis=0),dot(pclcov,bin(imll.T/(beam[c]*beam[d]),axis=1))) \
                     *calib[a]*calib[b]*calib[c]*calib[d]
         
         # Equation (9)
@@ -114,7 +114,7 @@ if __name__=="__main__":
             
             hat_cls_freq.cov[((alpha,beta),(gamma,delta))] = \
                 sum(weight(a,b)*weight(c,d)*hat_cls_det.cov[((a,b),(c,d))] for ((a,b),(c,d)) in abcds) \
-                / sum(weight(a,b)*weight(c,d) for  ((a,b),(c,d)) in abcds)
+                / sum(weight(a,b)*weight(c,d) for ((a,b),(c,d)) in abcds)
 
             
     
