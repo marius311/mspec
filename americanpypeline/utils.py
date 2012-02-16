@@ -11,7 +11,8 @@ def_dtype = float64
 def test_sym(m):
     return max(x for x in ((abs(m-m.T))/((m+m.T)/2.)).flatten() if isfinite(x))
     
-AProotdir = os.path.join(os.path.dirname(__file__),"..")
+AProotdir = os.path.abspath(os.path.join(os.path.dirname(__file__),".."))
+NOMPI = False
 
 def get_num_threads():
     """
@@ -28,7 +29,7 @@ def get_num_threads():
 
 
 def get_mpi():
-    if len([l[2] for l in traceback.extract_stack() if l[2] == 'mpi_map']) > 1:
+    if NOMPI or len([l[2] for l in traceback.extract_stack() if l[2] == 'mpi_map']) > 1:
         (rank,size,comm) = (0,1,None)
     else:
         try:

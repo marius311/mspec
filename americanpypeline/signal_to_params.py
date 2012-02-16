@@ -3,7 +3,7 @@
 import mcmc
 from americanpypeline import *
 import sys
-import pypico
+#import pypico
 from scipy.linalg import cho_factor, cho_solve
 import skymodel
 

@@ -12,6 +12,7 @@ from numpy import *
 from numpy.linalg import norm
 from collections import namedtuple, defaultdict
 from utils import *
+import utils
 from l3l4sum import l3l4sum
 l3l4sum = l3l4sum.l3l4_sum_single
 from bisect import bisect_right
@@ -23,11 +24,13 @@ if __name__=="__main__":
     if (len(sys.argv) != 2): 
         print "Usage: python mask_to_mll.py parameter_file.ini"
         sys.exit()
+
+    utils.NOMPI = True    
     
     params = read_AP_ini(sys.argv[1])
     lmax = params["lmax"]
     bin = params["binning"]
-    ells = bin(arange(lmax))
+    ells = arange(lmax)
     
     # Load mode coupling matrices
     if (params.get("mask")):
@@ -62,7 +65,7 @@ if __name__=="__main__":
         
     #Equation (4), the per detector signal estimate
     print "Calculating per-detector signal..."
-    hat_cls_det = PowerSpectra(ells=ells)
+    hat_cls_det = PowerSpectra(ells=bin(ells))
     for (a,b) in pairs(maps): hat_cls_det[(a,b)] = bin((dot(imll,pcls[(a,b)]) - (noise[a] if a==b else 0))/(beam[a]*beam[b]))
 
     # Do per detector calibration
@@ -75,7 +78,7 @@ if __name__=="__main__":
     
     # Equation (6), the per frequency signal estimate
     if (is_mpi_master()): print "Calculating signal..."
-    hat_cls_freq = PowerSpectra(ells=ells)
+    hat_cls_freq = PowerSpectra(ells=bin(ells))
     for (alpha,beta) in pairs(freqs):
         hat_cls_freq[(alpha,beta)] = sum(
                 hat_cls_det[(a,b)]*weight(a,b) 
@@ -89,19 +92,24 @@ if __name__=="__main__":
     if (str2bool(params.get("get_det_covariance",False)) or str2bool(params.get("get_covariance",False))):
         print "Calculating fiducial signal..."
         fid_cls = PowerSpectra(ells=ells)
-        for (a,b) in pairs(maps): fid_cls[(a,b)] = smooth(dot(imll,pcls[(a,b)]),window_len=125)*calib[a]*calib[b]
+        for (a,b) in pairs(maps): 
+            fid_cls[(a,b)] = smooth(dot(imll,pcls[(a,b)])*(ells+2)**2,window_len=50)/(ells+2)**2*calib[a]*calib[b]
+            fid_cls[(a,b)][:10] = 0
 
     
     if str2bool(params.get("get_covariance",True)):
         if (is_mpi_master()): print "Calculating detector covariance..."
         for ((a,b),(c,d)) in pairs(pairs(maps)):
-            if (is_mpi_master()): print "Calculating the "+str(((str(a),str(b)),(str(c),str(d))))+" entry."
-            # Equation (5)
-            pclcov = (lambda x: x+x.T)(outer(fid_cls[(a,c)],fid_cls[(b,d)]) + outer(fid_cls[(a,d)],fid_cls[(b,c)]))*gll2/2
-            # Equation (7)
-            hat_cls_det.cov[((a,b),(c,d))] = \
+            if weight(a,b)*weight(c,d)!=0:
+                if (is_mpi_master()): print "Calculating the "+str(((str(a),str(b)),(str(c),str(d))))+" entry."
+                # Equation (5)
+                pclcov = (lambda x: x+x.T)(outer(fid_cls[(a,c)],fid_cls[(b,d)]) + outer(fid_cls[(a,d)],fid_cls[(b,c)]))*gll2/2
+                # Equation (7)
+                hat_cls_det.cov[((a,b),(c,d))] = \
                     dot(bin(imll/transpose([beam[a]*beam[b]]),axis=0),dot(pclcov,bin(imll.T/(beam[c]*beam[d]),axis=1))) \
                     *calib[a]*calib[b]*calib[c]*calib[d]
+            else:
+                hat_cls_det.cov[((a,b),(c,d))] = 0
         
         # Equation (9)
         if (is_mpi_master()): print "Calculating covariance..."

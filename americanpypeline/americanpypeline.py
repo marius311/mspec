@@ -40,7 +40,7 @@ class SymmetricTensorDict(dict):
         else:
             ((a,b),(c,d)) = key
             for k in set([((a,b),(c,d)),((b,a),(c,d)),((a,b),(d,c)),((b,a),(d,c))]): dict.__setitem__(self,k,value)
-            for k in set([((c,d),(a,b)),((c,d),(b,a)),((d,c),(a,b)),((d,c),(b,a))]): dict.__setitem__(self,k,value.T)
+            for k in set([((c,d),(a,b)),((c,d),(b,a)),((d,c),(a,b)),((d,c),(b,a))]): dict.__setitem__(self,k,value.T if type(value)==ndarray else value)
 
 
     def get_index_values(self):
@@ -340,7 +340,7 @@ def get_bin_func(binstr):
 
 def load_signal(params, clean=False, calib=False, calibrange=slice(150,800), loadcov=True):
     params = read_AP_ini(params)
-    ells = get_bin_func(params.get("storage_binning","none"))(arange(params["lmax"]))
+    ells = params.get("binning","none")(arange(params["lmax"]))
     spectra = load_multi(params["signal"]+"_spec")[:,1]
     cov = None
     if loadcov and str2bool(params.get("get_covariance",False)):
