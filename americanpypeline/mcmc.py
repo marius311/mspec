@@ -1,10 +1,15 @@
 import sys, os, re
 import numpy as np
 from numpy import array, shape, loadtxt, log, genfromtxt, cov, sqrt, diag, vstack, sum, average, hstack, mean, savetxt, histogram, histogram2d
+from numpy.linalg import inv
 from random import random
 from itertools import product, repeat
 from matplotlib.mlab import movavg
-from matplotlib.pyplot import plot, hist, contour
+from matplotlib.pyplot import plot, hist, contour, contourf
+from utils import read_ini
+from ast import literal_eval
+from numpy.ma.core import transpose, sort
+from numpy.lib.function_base import interp
 
 
 """
@@ -14,8 +19,37 @@ from matplotlib.pyplot import plot, hist, contour
 """
 
 
+def bestfit(start,lnl,init_fn=[],derived_fn=[],step_fn=[]):
+    #Make lists of the input functions if they aren't
+    [lnl,init_fn,derived_fn,step_fn] = map(lambda x: x if type(x)==list else [x],[lnl,init_fn,derived_fn,step_fn])
 
+    #Read and process the starting parameters
+    if (type(start)==str): start=read_ini(start)
+    params = get_mcmc_params(start,derived_fn)
+    
+    #Call initialization functions
+    for fn in init_fn: fn(params)
 
+    params = propose_step_gaussian(params)
+    
+    def flnl(x):
+        params.update(dict(zip(get_varied(params),x)))
+        test_lnl = sum([l(params) for l in lnl])
+        mcmc_log(params,"Like="+str(test_lnl)+" Sample="+str(dict([(name,params[name]) for name in get_outputted(params)]))) 
+        return test_lnl
+
+    from scipy.optimize import fmin
+    from numdifftools import Hessian
+    
+    print "Minimizing..."
+    minp = fmin(flnl,[params[k] for k in get_varied(params)])
+    print "Computing hessian..."
+    with open(params['hessian'],'w') as f:
+        f.write('# '+' '.join(get_varied(params))+'\n')
+        savetxt(f,inv(Hessian(flnl,stepNom=minp/10)(minp)))
+                       
+    return params
+    
 
 def mcmc(start,lnl,init_fn=[],derived_fn=[],step_fn=[]):
     """
@@ -44,11 +78,10 @@ def mcmc(start,lnl,init_fn=[],derived_fn=[],step_fn=[]):
     [lnl,init_fn,derived_fn,step_fn] = map(lambda x: x if type(x)==list else [x],[lnl,init_fn,derived_fn,step_fn])
 
     #Read and process the starting parameters
-    if (type(start)==str): start=read_params(start)
-    cur_params = get_processed_params(start)
+    if (type(start)==str): start=read_ini(start)
+    cur_params = get_mcmc_params(start,derived_fn)
     
     #Call initialization functions
-    for fn in derived_fn: fn(cur_params)
     for fn in init_fn: fn(cur_params)
     
     #Initialize starting sample
@@ -67,19 +100,15 @@ def mcmc(start,lnl,init_fn=[],derived_fn=[],step_fn=[]):
     for sample_num in range(int(start.get("samples",100))):
         test_params = propose_step_gaussian(cur_params)
         
-        for fn in derived_fn: fn(test_params)
-        
         # Check min/max bounds
         test_lnl = 0
         for name in get_varied(test_params): 
             if (not (test_params["*"+name][1] < test_params[name] < test_params["*"+name][2])): test_lnl = np.inf
         
-        mcmc_log(cur_params," Ratio="+str(np.mean(1./array(samples["weight"])))+" Sample="+str(dict([(name,test_params[name]) for name in get_outputted(cur_params)]))) 
-
         #Get likelihood
         if (test_lnl != np.inf): test_lnl = sum([l(test_params) for l in lnl])
                 
-#        mcmc_log(cur_params,"Like="+str(test_lnl)+" Ratio="+str(np.mean(1./array(samples["weight"])))+" Sample="+str(dict([(name,test_params[name]) for name in get_outputted(cur_params)]))) 
+        mcmc_log(cur_params,"Like="+str(test_lnl)+" Ratio="+str(np.mean(1./array(samples["weight"])))+" Sample="+str(dict([(name,test_params[name]) for name in get_outputted(cur_params)]))) 
 
         if (log(random()) < samples["lnl"][-1]-test_lnl):
 
@@ -144,8 +173,8 @@ def mpi_mcmc(start,lnl,init_fn=[],derived_fn=[],step_fn=[]):
         mcmc(start,lnl,init_fn=init_fn,derived_fn=derived_fn,step_fn=step_fn)
         return 
 
-    if (type(start)==str): start=read_params(start)
-    start = get_processed_params(start)
+    if (type(start)==str): start=read_ini(start)
+    start = get_mcmc_params(start)
     start["samples"]/=size
     if "file_root" in start: start["file_root"]+=("_"+str(rank))
 
@@ -163,6 +192,7 @@ def mpi_mcmc(start,lnl,init_fn=[],derived_fn=[],step_fn=[]):
         sl = dict([(name,samples[name][-nws:]) for name in samples.keys()])
         sl["weight"][0]-=(sum(weights[-nws:])-delta)
         return sl
+    
         
     def mpi_step_fn(params,samples):
         """ 
@@ -214,7 +244,17 @@ def mcmc_log(params,message):
     if (params["$MCMC_VERBOSE"]): print message
 
 
-def get_processed_params(params):
+def depends(*deps):
+    deps = set(deps)
+    def f1(f):
+        def f2(p,changed=None):
+            if changed==None or (deps & set(changed)): return f(p)
+            else: return {}
+        return f2
+    return f1
+
+
+def get_mcmc_params(params,derived=[]):
     """
     Process the parameters string key-value pairs given in params.
     
@@ -223,25 +263,52 @@ def get_processed_params(params):
     -For all varied parameters (ones which have [MIN MAX WIDTH]), remove the [], add a *name, and add them to $VARIED
     -Either load the covariance from a file, or generate it from the WIDTHs
     """
-    
+    class mcmc_params(dict):
+        derived = []
+        
+        def __init__(self, *args, **kwargs):
+            self.derived = kwargs.pop('derived',[])
+            dict.__init__(self, *args, **kwargs)
+        
+        def update(self, other, derive=True):
+            for k,v in other.items(): self.__setitem__(k, v, derive=False)
+            if derive: self._update_derived(changed=other.keys())
+            
+        def __setitem__(self, k, v, derive=True):
+            dict.__setitem__(self, k, v)
+            if derive: self._update_derived(changed=[k])
+                
+        def _update_derived(self,changed=None):
+            for d in self.derived: self.update(d(self,changed=changed),derive=False)
+            
+        def add_derived(self,d):
+            self.derived.append(d)
+            self._update_derived()
+            
+        def copy(self):
+            return mcmc_params(dict.copy(self),derived=self.derived)
+        
+            
+    if type(params)==str: params = read_ini(params)
     if (params.get("$PROCESSED",False)): return params
     
     varied_params = []
-    processed = {}
+    processed = mcmc_params()
     
     for (k,v) in params.items():
+        pv = v
         if (type(v)==str):
-            r = re.search("(.*?)\[(.*?)\]$",v)
+            r = re.search("({0})\s\[\s?({0})\s({0})\s({0})\s?\]".format("[0-9.eE+-]+?"),v)
             if (r==None):
-                pv=try_type(v.split())
+                try: 
+                    pv = literal_eval(v)
+                    if isinstance(pv, list): pv=array(pv)
+                except: pv = try_type(v)
             else:
                 pv=float(r.groups()[0])
-                processed["*"+k]=map(float,[r.groups()[0]]+r.groups()[1].split())
+                processed["*"+k]=map(float,r.groups())
                 varied_params.append(k)
-            if (type(pv)==list and len(pv)==1): pv=pv[0]
-        else:
-            pv = v
-            
+                
         processed[k] = pv
         
     processed["$VARIED"] = varied_params 
@@ -252,6 +319,8 @@ def get_processed_params(params):
     processed["$UPDATECOV"]=processed.get("proposal_update",True)
     [processed["$RMIN"],processed["$RMAX"]] = processed.get("proposal_update_minmax_R",[0,np.inf])
     processed["$PROCESSED"] = True
+    
+    for d in derived: processed.add_derived(d)
     
     return processed
 
@@ -275,6 +344,7 @@ def get_varied(params):
 def get_outputted(params):
     return params["$OUTPUT"]
 
+
 def propose_step_gaussian(params):
     """
     Take a gaussian step in $VARIED according to $COV
@@ -286,7 +356,7 @@ def propose_step_gaussian(params):
         raise ValueError("Covariance not the same length as number varied parameters.")
     dxs = np.random.multivariate_normal([0]*nparams,cov) * sqrt(params["$COV_FAC"])
     propose = params.copy()
-    for (name,dx) in zip(varied_params,dxs): propose[name]+=dx
+    propose.update({name:params[name]+dx for (name,dx) in zip(varied_params,dxs)})
     return propose
 
 
@@ -338,8 +408,8 @@ class Chain(dict):
     def cov(self,params=None): return get_covariance(self.matrix(params), self["weight"])
     def mean(self,params=None): return average(self.matrix(params),axis=0,weights=self["weight"])
     def std(self,params=None): return sqrt(average((self.matrix(params)-self.mean(params))**2,axis=0,weights=self["weight"]))
-    def like1d(self,p,nbins=30): likelihoodplot1d(self[p],weights=self["weight"],nbins=nbins)
-    def like2d(self,p1,p2): raise NotImplementedError()
+    def like1d(self,p,**kw): likelihoodplot1d(self[p],weights=self["weight"],**kw)
+    def like2d(self,p1,p2,**kw): likelihoodplot2d(self[p1], self[p2], weights=self["weight"], **kw)
     def acceptance(self): return mean(1./self["weight"])
     def savecov(self,file,params=None):
         if not params: params = self.params()
@@ -358,12 +428,18 @@ class Chains(list):
     def plot(self,param): 
         for c in self: plot(c[param])
     
-def likelihoodplot2d(datx,daty,weights=None,nbins=15,which=[.68,.95],plotfunc=contour,colors='k'):
+    
+def confint2d(hist,which):
+    H=sort(hist.ravel())[::-1]
+    sumH=sum(H)
+    cdf=array([sum(H[H>x])/sumH for x in H])
+    return interp(which,cdf,H)
+
+def likelihoodplot2d(datx,daty,weights=None,nbins=15,which=[.68,.95],filled=True,color='k',**kw):
     if (weights==None): weights=ones(len(datx))
     H,xe,ye = histogram2d(datx,daty,nbins,weights=weights)
-    xem=movavg(xe,2)
-    yem=movavg(ye,2)
-    plotfunc(xem,yem,transpose(H),levels=confint2d(H, which[::-1]+[0]),colors=colors)
+    xem, yem = movavg(xe,2), movavg(ye,2)
+    (contourf if filled else contour)(xem,yem,transpose(H),levels=confint2d(H, which[::-1]+[0]),colors=color,**kw)
     
 def likelihoodplot1d(dat,weights=None,nbins=30,range=None,maxed=True):
     if (weights==None): weights=ones(len(dat))
