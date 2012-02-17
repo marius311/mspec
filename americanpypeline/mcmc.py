@@ -39,14 +39,21 @@ def bestfit(start,lnl,init_fn=[],derived_fn=[],step_fn=[]):
         return test_lnl
 
     from scipy.optimize import fmin
-    from numdifftools import Hessian
+    
     
     print "Minimizing..."
     minp = fmin(flnl,[params[k] for k in get_varied(params)])
-    print "Computing hessian..."
-    with open(params['hessian'],'w') as f:
-        f.write('# '+' '.join(get_varied(params))+'\n')
-        savetxt(f,inv(Hessian(flnl,stepNom=minp/10)(minp)))
+    
+    if params.get('hessian',False):
+        try:  
+            from numdifftools import Hessian
+            print "Computing hessian..."
+            ih = inv(Hessian(flnl,stepNom=minp/10)(minp))
+            with open(params['hessian'],'w') as f:
+                f.write('# '+' '.join(get_varied(params))+'\n')
+                savetxt(f,ih)
+        except ImportError:
+            print "Please install numdifftools package for Hessian feature."
                        
     return params
     
