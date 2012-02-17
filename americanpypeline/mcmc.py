@@ -1,6 +1,6 @@
 import sys, os, re
 import numpy as np
-from numpy import array, shape, loadtxt, log, genfromtxt, cov, sqrt, diag, vstack, sum, average, hstack, mean, savetxt, histogram, histogram2d
+from numpy import array, shape, loadtxt, log, genfromtxt, cov, sqrt, diag, vstack, sum, average, hstack, mean, savetxt, histogram, histogram2d, inf
 from numpy.linalg import inv
 from random import random
 from itertools import product, repeat
@@ -115,7 +115,7 @@ def mcmc(start,lnl,init_fn=[],derived_fn=[],step_fn=[]):
         #Get likelihood
         if (test_lnl != np.inf): test_lnl = sum([l(test_params) for l in lnl])
                 
-        mcmc_log(cur_params,"Like="+str(test_lnl)+" Ratio="+str(np.mean(1./array(samples["weight"])))+" Sample="+str(dict([(name,test_params[name]) for name in get_outputted(cur_params)]))) 
+#        mcmc_log(cur_params,"Like="+str(test_lnl)+" Ratio="+str(np.mean(1./array(samples["weight"])))+" Sample="+str(dict([(name,test_params[name]) for name in get_outputted(cur_params)]))) 
 
         if (log(random()) < samples["lnl"][-1]-test_lnl):
 
@@ -180,13 +180,14 @@ def mpi_mcmc(start,lnl,init_fn=[],derived_fn=[],step_fn=[]):
         mcmc(start,lnl,init_fn=init_fn,derived_fn=derived_fn,step_fn=step_fn)
         return 
 
+    #Make lists of the input functions if they aren't
+    [lnl,init_fn,derived_fn,step_fn] = map(lambda x: x if type(x)==list else [x],[lnl,init_fn,derived_fn,step_fn])
+
     if (type(start)==str): start=read_ini(start)
-    start = get_mcmc_params(start)
+    start = get_mcmc_params(start,derived_fn)
     start["samples"]/=size
     if "file_root" in start: start["file_root"]+=("_"+str(rank))
 
-    #Make lists of the input functions if they aren't
-    [lnl,init_fn,derived_fn,step_fn] = map(lambda x: x if type(x)==list else [x],[lnl,init_fn,derived_fn,step_fn])
 
     delta_send_samples = 50
 
@@ -206,7 +207,7 @@ def mpi_mcmc(start,lnl,init_fn=[],derived_fn=[],step_fn=[]):
         This is the worker process code.
         """
         if (sum(samples["weight"])%delta_send_samples==0):
-            mcmc_log(params,"Chain "+str(rank)+": steps="+str(sum(samples["weight"]))+" approval="+str(np.mean(1./array(samples["weight"])))+" best:"+str(min(samples["lnl"][1:])))
+            mcmc_log(params,"Chain "+str(rank)+": steps="+str(sum(samples["weight"]))+" approval="+str(np.mean(1./array(samples["weight"])))+" best:"+str(min([inf]+samples["lnl"][1:])))
             comm.send((rank,wslice(samples,delta_send_samples)))    
             new_params = comm.recv()
             if (new_params!=None):  
@@ -227,6 +228,7 @@ def mpi_mcmc(start,lnl,init_fn=[],derived_fn=[],step_fn=[]):
             return {"$COV":get_new_proposal(samples, start)}
         else: 
             return None
+
 
     if (rank==0):
         samples = [dict([(name,[]) for name in get_varied(start)+["lnl","weight"]]) for i in range(size)]
