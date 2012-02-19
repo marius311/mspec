@@ -1,5 +1,5 @@
 from ast import literal_eval
-from bisect import bisect_right
+from bisect import bisect_right, bisect_left
 from collections import namedtuple
 from matplotlib.pyplot import plot, errorbar, contour, yscale as ppyscale, xscale as ppxscale
 from matplotlib.mlab import movavg
@@ -339,9 +339,12 @@ def get_bin_func(binstr):
         bindat=[arange(l,l+dl) for l in dl*arange(10000/dl)]
     
     def bin(x,axis=None):
-        bins = bindat[:bisect_right([s[0] for s in bindat],len(x))-1]
-        for a in ([axis] if axis!=None else range(x.ndim)): x = array([x.take(s,axis=a).mean(axis=a) for s in bins]).swapaxes(a,0)
-        return x
+        if type(x)==slice:
+            return slice(bisect_left([s[0] for s in bindat],x.start),bisect_left([s[-1] for s in bindat],x.stop))
+        else:
+            bins = bindat[:bisect_left([s[-1] for s in bindat],len(x))]
+            for a in ([axis] if axis!=None else range(x.ndim)): x = array([x.take(s,axis=a).mean(axis=a) for s in bins]).swapaxes(a,0)
+            return x
 
     if bindat!=None: return bin
     else: raise ValueError("Unknown binning function '"+binstr+"'")
