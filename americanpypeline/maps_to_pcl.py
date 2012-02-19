@@ -29,10 +29,14 @@
                                     accepting names like '100-1a_W_TauDeconv_v47.fits'
      
 """
+import matplotlib
+matplotlib.use('agg')
+
+
 
 from americanpypeline import *
 from utils import *
-import sys, os, re, gc, pyfits
+import sys, os, re, gc
 from numpy import *
 import healpy as H
 
@@ -48,6 +52,7 @@ if __name__=="__main__":
     regex = re.compile(params.get("map_regex",def_map_regex))
     maps = [(os.path.join(params["maps"],f),regex.search(f)) for f in os.listdir(params["maps"]) if ".fits" in f]
     maps = sorted([(f,[r.group(1),r.group(2)]) for (f,r) in maps if r])
+    print maps
     
     # Other options
     mask = H.read_map(params["mask"]) if params.get("mask") else None
@@ -65,7 +70,7 @@ if __name__=="__main__":
         mp = H.read_map(file)
         if mask!=None: mp*=mask
         if (len(mp[mp<-1e20])!=0):
-            print "Warning: Setting remaining UNSEEN pixels after masking to 0 in "+file
+            print "Warning: Setting "+str(len(mp[mp<-1e20]))+" remaining UNSEEN pixels after masking to 0 in "+file
             mp[mp<-1e20]=0
         det.insert(1,"T") #For now just T maps, in future we'll have either separate files or 3 columns, handled here
         print det, min(mp), max(mp)

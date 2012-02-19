@@ -100,7 +100,16 @@ class PowerSpectra():
     
     def get_maps(self):
         return sorted(self.spectra.get_index_values())
-    
+
+    def get_spectra(self):
+        return pairs(self.get_maps())
+
+    def get_auto_spectra(self):
+        return [(m,m) for m in self.get_maps()]
+
+    def get_cross_spectra(self):
+        return set(self.get_spectra()) - set(self.get_auto_spectra())
+
     def get_as_matrix(self,ell_blocks=False):
         """
         Gets the spectra and covariance as matrices.
@@ -370,7 +379,7 @@ def load_beams(params):
     beams = SymmetricTensorDict(rank=2)
     for (f,m) in files:
         if len(m)==1: beams[(m[0],m[0])] = load_multi(f)[:int(params["lmax"]),params.get("beam_col",1)]**2
-        elif len(m)==2: beams[(m[0],m[1])] = load_multi(f)[:int(params["lmax"]),params.get("beam_col",1)]
+        elif len(m)==2: beams[(m[0],m[1])] = load_multi(f)[:int(params["lmax"]),params.get("beam_col",1)]**2
         
     for (m1,m2) in pairs(beams.get_index_values()):
         if (m1,m2) not in beams: 
