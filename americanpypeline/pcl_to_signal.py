@@ -13,8 +13,6 @@ from numpy.linalg import norm
 from collections import namedtuple, defaultdict
 from utils import *
 import utils
-from l3l4sum import l3l4sum
-l3l4sum = l3l4sum.l3l4_sum_single
 from bisect import bisect_right
 
 
@@ -32,6 +30,23 @@ if __name__=="__main__":
     bin = params["binning"]
     ells = arange(lmax)
     
+    # Load stuff
+    if (is_mpi_master()): print "Loading pseudo-cl's, beams, and noise..."
+    pcls = load_pcls(params)
+    beam = load_beams(params) if params.get("beams",None) else defaultdict(lambda: 1)
+    noise = load_noise(params) if params.get("noise",None) else defaultdict(lambda: 0)
+
+    freqs = params.get("freqs")
+    maps = set(m for m in pcls.get_maps() if (m.fr in freqs if freqs else True))
+    if params.get("beams",None): maps&=set(beam.get_index_values())
+    if params.get("noise",None): maps&=set(noise.get_keys())
+    freqs = [m.fr for m in maps]
+    
+    if (is_mpi_master()): print "Found pseudo-cl's, beams, and noise for: "+str(maps)
+
+    if str2bool(params.get("use_auto_spectra",'F')): weight = lambda a,b: 1
+    else: weight = lambda a,b: 0 if a==b else 1
+
     # Load mode coupling matrices
     if (params.get("mask")):
         if (is_mpi_master()): print "Loading mode coupling matrices..."
@@ -42,31 +57,11 @@ if __name__=="__main__":
     else:
         imll=1
         gll2=diag(1./(2*arange(lmax)+1))
-        
-    # The raw pseudo-C_ells
-    if (is_mpi_master()): print "Loading pseudo-cl's..."
-    pcls = load_pcls(params)
-    freqs = params["freqs"].split()
-    assert not set(freqs)-set(m.fr for m in pcls.get_maps()), "Couldn't find pseudo-cl's for all the desired frequencies: "+freqs
-    maps = [m for m in pcls.get_maps() if m.fr in freqs]
-    
-    beam = load_beams(params) if params.get("beams",None) else {m:1 for m in maps}
-    noise = load_noise(params) if params.get("noise",None) else {m:0 for m in maps}
-    if str2bool(params.get("use_auto_spectra",'F')): 
-        def weight(a,b): return 1
-    else:
-        def weight(a,b): return 0 if a==b else 1
 
-    if set(maps) - set(beam.keys()):
-        print "Warning: Missing beams for the following detectors: \n"+str(set(maps) - set(beam.keys()))+"\
-               \nContinuing without those maps."
-        maps = [m for m in maps if m in beam.keys()]
-    
-        
     #Equation (4), the per detector signal estimate
     print "Calculating per-detector signal..."
     hat_cls_det = PowerSpectra(ells=bin(ells))
-    for (a,b) in pairs(maps): hat_cls_det[(a,b)] = bin((dot(imll,pcls[(a,b)]) - (noise[a] if a==b else 0))/(beam[a]*beam[b]))
+    for (a,b) in pairs(maps): hat_cls_det[(a,b)] = bin((dot(imll,pcls[(a,b)]) - (noise[a] if a==b else 0))/(beam[(a,b)]))
 
     # Do per detector calibration
     if (str2bool(params.get('do_calibration',True))):
@@ -89,7 +84,7 @@ if __name__=="__main__":
             )
     
     # The fiducial model for the mask deconvolved Cl's which gets used in the covariance
-    if (str2bool(params.get("get_det_covariance",False)) or str2bool(params.get("get_covariance",False))):
+    if str2bool(params.get("get_covariance",False)):
         print "Calculating fiducial signal..."
         fid_cls = PowerSpectra(ells=ells)
         for (a,b) in pairs(maps): 
@@ -106,7 +101,7 @@ if __name__=="__main__":
                 pclcov = (lambda x: x+x.T)(outer(fid_cls[(a,c)],fid_cls[(b,d)]) + outer(fid_cls[(a,d)],fid_cls[(b,c)]))*gll2/2
                 # Equation (7)
                 hat_cls_det.cov[((a,b),(c,d))] = \
-                    dot(bin(imll/transpose([beam[a]*beam[b]]),axis=0),dot(pclcov,bin(imll.T/(beam[c]*beam[d]),axis=1))) \
+                    dot(bin(imll/transpose([beam[(a,b)]]),axis=0),dot(pclcov,bin(imll.T/(beam[(c,d)]),axis=1))) \
                     *calib[a]*calib[b]*calib[c]*calib[d]
             else:
                 hat_cls_det.cov[((a,b),(c,d))] = 0

@@ -358,27 +358,25 @@ def load_clean_calib_signal(params,calibrange=slice(150,800)):
 
 def load_pcls(params):
     params = read_AP_ini(params)
-    lmax = params["lmax"]
-    ells = arange(lmax)
-    spectra = SymmetricTensorDict(rank=2)
-    for f in os.listdir(params["pcls"]):
-        try:
-            (a,b) = tuple(MapID(*s.split("-")) for s in f.replace(".dat","").split("__"))
-            pcl = load_multi(os.path.join(params["pcls"],f))[:lmax]
-            assert alen(pcl)>=lmax, "Pseudo-cl's have not been calculated to high enough lmax. Please run maps_to_pcls.py again." 
-            spectra[(a,b)] = pcl
-        except: 
-            print "Error loading pseudo-Cl. Skipping "+os.path.join(params["pcls"],f)
-        
-    return PowerSpectra(spectra,None,ells)
-
+    regex=re.compile(params.get("map_regex",def_map_regex))
+    files = [(os.path.join(params["pcls"],f),[MapID(m.group(1),'T',m.group(2)) for m in regex.finditer(f)]) for f in os.listdir(params["pcls"])]
+    return PowerSpectra({tuple(m):load_multi(f)[:int(params["lmax"])] for (f,m) in files if len(m)==2})
 
 
 def load_beams(params):
     params = read_AP_ini(params)
     regex=re.compile(params.get("map_regex",def_map_regex))
-    files = [(os.path.join(params["beams"],f),regex.search(f)) for f in os.listdir(params["beams"])]
-    return dict([(MapID(r.group(1),'T',r.group(2)),load_multi(f)[:int(params["lmax"]),params.get("beam_col",1)]) for (f,r) in files if r!=None])
+    files = [(os.path.join(params["beams"],f),[MapID(m.group(1),'T',m.group(2)) for m in regex.finditer(f)]) for f in os.listdir(params["beams"])]
+    beams = SymmetricTensorDict(rank=2)
+    for (f,m) in files:
+        if len(m)==1: beams[(m[0],m[0])] = load_multi(f)[:int(params["lmax"]),params.get("beam_col",1)]**2
+        elif len(m)==2: beams[(m[0],m[1])] = load_multi(f)[:int(params["lmax"]),params.get("beam_col",1)]
+        
+    for (m1,m2) in pairs(beams.get_index_values()):
+        if (m1,m2) not in beams: 
+            beams[(m1,m2)] = sqrt(beams[(m1,m1)]*beams[(m2,m2)])
+    
+    return PowerSpectra(beams)
         
 def load_noise(params):
     params = read_AP_ini(params)
