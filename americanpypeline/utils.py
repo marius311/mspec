@@ -180,6 +180,20 @@ def corrify(m):
         m2[:,i]/=sqrt(m[i,i])
     return m2
 
+def try_type(v):
+    """
+    If v is a numerical string, returns float(v) 
+    """
+    if (type(v)==list): return map(try_type,v)
+    if (type(v)!=str): return v
+    try:
+        return float(v)
+    except ValueError:
+        if (v.lower() in ["t","true"]): return True
+        elif (v.lower() in ["f","false"]): return False
+        return v
+
+
 """
 cookb_signalsmooth.py
 

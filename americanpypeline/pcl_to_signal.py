@@ -36,13 +36,13 @@ if __name__=="__main__":
     beam = load_beams(params) if params.get("beams",None) else defaultdict(lambda: 1)
     noise = load_noise(params) if params.get("noise",None) else defaultdict(lambda: 0)
 
-    freqs = params.get("freqs").split()
-    maps = set(m for m in pcls.get_maps() if (m.fr in freqs if freqs else True))
+    freqs = params.get("freqs")
+    maps = set(m for m in pcls.get_maps() if (m.fr in freqs if freqs!=None else True))
     if params.get("beams",None): maps&=set(beam.get_maps())
     if params.get("noise",None): maps&=set(noise.get_keys())
     freqs = set(m.fr for m in maps)
     
-    if (is_mpi_master()): print "Found pseudo-cl's, beams, and noise for: "+str(maps)
+    if (is_mpi_master()): print "Found pseudo-cl's, beams, and noise for: "+str(sorted(maps))
 
     if str2bool(params.get("use_auto_spectra",'F')): weight = lambda a,b: 1
     else: weight = lambda a,b: 0 if a==b else 1
