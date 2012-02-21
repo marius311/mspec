@@ -5,7 +5,8 @@ from numpy import *
 import os
 
 def cmb(p,ps):
-    cmb = hstack([[0,0],pypico.pico(**p)[0][:p["lmax"]-2]])
+    cmbfunc = pypico.pico if p.get('use_pico',False) else pypico.camb
+    cmb = hstack([[0],cmbfunc(**p)[0][:p["lmax"]-1]])
     return PowerSpectra({k:cmb for k in ps})
 
 def cmb_wmap(p,ps):

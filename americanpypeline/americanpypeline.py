@@ -256,24 +256,33 @@ class PowerSpectra():
         assert all(ell == ells[0] for ell in ells), "Can't add spectra with different ells."
         maps = reduce(lambda x, y: x & y, [set(p.get_maps()) for p in ps])
         spectra = SymmetricTensorDict([(k,sum(p.spectra[k] for p in ps)) for k in pairs(maps)],rank=2)
-        cov = SymmetricTensorDict([(k,sum(p.cov[k] for p in ps)) for k in pairs(pairs(maps))],rank=4)
+        if all([p.cov for p in ps]): cov = SymmetricTensorDict([(k,sum(p.cov[k] for p in ps)) for k in pairs(pairs(maps))],rank=4)
+        else: cov=None
         return PowerSpectra(spectra,cov,ells[0])
 
 
-def read_AP_ini(params):
+def read_AP_ini(p):
     """
     Read and process the americanpypeline ini file
     """
-    if type(params)==str:
-        p = read_ini(params)
+    if type(p)==str:
+        p = read_ini(p)
+        
+        for (k,v) in p.items():
+            if (type(v)==str):
+                try: 
+                    pv = literal_eval(v)
+                    if isinstance(pv, list): pv = array(pv)
+                except: pv = try_type(v)
+                p[k]=pv
+                
         p["lmin"]=int(p.get("lmin",0))
         p["lmax"]=int(p["lmax"])
-        if "cleaning" in p: p["cleaning"]=[(outmap,[(str(inmap),coeff) for (inmap,coeff) in lc]) for (outmap,lc) in literal_eval(p["cleaning"]).items()]
-        else: p["cleaning"]=None
+#        if "cleaning" in p: p["cleaning"]=[(outmap,[(str(inmap),coeff) for (inmap,coeff) in lc]) for (outmap,lc) in literal_eval(p["cleaning"]).items()]
+#        else: p["cleaning"]=None
         p["binning"]=get_bin_func(p.get("binning","none"))
-        return p
-    else:
-        return params
+        
+    return p
 
 
 
@@ -330,8 +339,8 @@ def get_bin_func(binstr):
         bindat=[arange(s,e+1) for [s,e] in ctpbins[:,[1,2]]]
     
     if (binstr=='wmap'): 
-        wmapbins=loadtxt(os.path.join(AProotdir,"dat/external/wmap_binned_tt_spectrum_7yr_v4p1.txt"),dtype=int)
-        bindat=[arange(s,e+1) for [s,e] in wmapbins[:-2,[1,2]]]+[arange(l,l+50) for l in range(1001,2000,50)]+[arange(l,l+200) for l in range(2001,4000,200)]
+            wmapbins=loadtxt(os.path.join(AProotdir,"dat/external/wmap_binned_tt_spectrum_7yr_v4p1.txt"),dtype=int)
+            bindat=[arange(s,e+1) for [s,e] in wmapbins[:-2,[1,2]]]+[arange(l,l+50) for l in range(1001,2000,50)]+[arange(l,l+200) for l in range(2001,4000,200)]
 
     r = re.match("flat\((?:dl=)?([0-9]+)\)",binstr)
     if (r!=None):
@@ -352,14 +361,14 @@ def get_bin_func(binstr):
 
 def load_signal(params, clean=False, calib=False, calibrange=slice(150,800), loadcov=True):
     params = read_AP_ini(params)
-    ells = params.get("binning","none")(arange(params["lmax"]))
-    spectra = load_multi(params["signal"]+"_spec")[:,1]
+    ells, spectra = load_multi(params["signal"]+"_spec").T
+    ells = array(sorted(set(ells)))
     cov = None
     if loadcov and str2bool(params.get("get_covariance",False)):
         try: cov = load_multi(params["signal"]+"_cov")
         except IOError: pass
-    signal = PowerSpectra(spectra, cov, ells, params["freqs"].split())
-    if clean and params["cleaning"]!=None: signal = signal.lincombo(params["cleaning"])
+    signal = PowerSpectra(spectra, cov, ells, params["freqs"])
+    if clean and "cleaning" in params: signal = signal.lincombo(params["cleaning"])
     if calib: signal = signal.lincombo(signal.calibrated(signal.get_maps(),calibrange),normalize=False)
     return signal
 

@@ -6,7 +6,7 @@ from random import random
 from itertools import product, repeat
 from matplotlib.mlab import movavg
 from matplotlib.pyplot import plot, hist, contour, contourf
-from utils import read_ini
+from utils import read_ini, try_type
 from ast import literal_eval
 from numpy.ma.core import transpose, sort
 from numpy.lib.function_base import interp
@@ -30,7 +30,7 @@ def bestfit(start,lnl,init_fn=[],derived_fn=[],step_fn=[]):
     #Call initialization functions
     for fn in init_fn: fn(params)
 
-    params = propose_step_gaussian(params)
+#    params = propose_step_gaussian(params)
     
     def flnl(x):
         params.update(dict(zip(get_varied(params),x)))
@@ -103,7 +103,10 @@ def mcmc(start,lnl,init_fn=[],derived_fn=[],step_fn=[]):
     else:
         output_to_file = False
     
+    cur_params = propose_step_gaussian(cur_params,fac=10)
+    
     #Start the MCMC
+    print "Starting chain..."
     for sample_num in range(int(start.get("samples",100))):
         test_params = propose_step_gaussian(cur_params)
         
@@ -115,7 +118,7 @@ def mcmc(start,lnl,init_fn=[],derived_fn=[],step_fn=[]):
         #Get likelihood
         if (test_lnl != np.inf): test_lnl = sum([l(test_params) for l in lnl])
                 
-#        mcmc_log(cur_params,"Like="+str(test_lnl)+" Ratio="+str(np.mean(1./array(samples["weight"])))+" Sample="+str(dict([(name,test_params[name]) for name in get_outputted(cur_params)]))) 
+        mcmc_log(cur_params,"Like="+str(test_lnl)+" Ratio="+str(np.mean(1./array(samples["weight"])))+" Sample="+str(dict([(name,test_params[name]) for name in get_outputted(cur_params)]))) 
 
         if (log(random()) < samples["lnl"][-1]-test_lnl):
 
@@ -333,20 +336,6 @@ def get_mcmc_params(params,derived=[]):
     
     return processed
 
-def try_type(v):
-    """
-    If v is a numerical string, returns float(v) 
-    """
-    if (type(v)==list): return map(try_type,v)
-    if (type(v)!=str): return v
-    try:
-        return float(v)
-    except ValueError:
-        if (v.lower() in ["t","true"]): return True
-        elif (v.lower() in ["f","false"]): return False
-        return v
-            
-
 def get_varied(params):
     return params["$VARIED"]
 
@@ -354,7 +343,7 @@ def get_outputted(params):
     return params["$OUTPUT"]
 
 
-def propose_step_gaussian(params):
+def propose_step_gaussian(params,fac=None):
     """
     Take a gaussian step in $VARIED according to $COV
     """
@@ -363,7 +352,7 @@ def propose_step_gaussian(params):
     nparams = len(varied_params)
     if (shape(cov)!=(nparams,nparams)):
         raise ValueError("Covariance not the same length as number varied parameters.")
-    dxs = np.random.multivariate_normal([0]*nparams,cov) * sqrt(params["$COV_FAC"])
+    dxs = np.random.multivariate_normal([0]*nparams,cov) * sqrt(fac if fac else params["$COV_FAC"])
     propose = params.copy()
     propose.update({name:params[name]+dx for (name,dx) in zip(varied_params,dxs)})
     return propose
