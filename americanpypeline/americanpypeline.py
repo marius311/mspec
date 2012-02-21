@@ -151,7 +151,7 @@ class PowerSpectra():
         fid = mean([self.spectra[(a,b)][ells]*weighting for (a,b) in pairs(maps)],axis=0)
         def miscalib(calib):
             return sum(norm(self.spectra[(a,b)][ells]*weighting*calib[ia]*calib[ib] - fid) for ((a,ia),(b,ib)) in pairs(zip(maps,range(len(maps)))))
-        calib = fmin(miscalib,ones(len(maps)),disp=False)
+        calib = fmin(miscalib,ones(len(maps)),disp=True)
         return [(newmap,[(newmap,calib[maps.index(newmap)] if newmap in maps else 1)]) for newmap in self.get_maps()]
         
     
@@ -350,9 +350,10 @@ def get_bin_func(binstr):
     else: raise ValueError("Unknown binning function '"+binstr+"'")
 
 
-def load_signal(params, clean=False, calib=False, calibrange=slice(150,800), loadcov=True):
+def load_signal(params, clean=False, calib=False, calibrange=slice(150,500), loadcov=True):
     params = read_AP_ini(params)
-    ells = params.get("binning","none")(arange(params["lmax"]))
+    bin = params['binning']
+    ells = bin(arange(params["lmax"]))
     spectra = load_multi(params["signal"]+"_spec")[:,1]
     cov = None
     if loadcov and str2bool(params.get("get_covariance",False)):
@@ -360,7 +361,7 @@ def load_signal(params, clean=False, calib=False, calibrange=slice(150,800), loa
         except IOError: pass
     signal = PowerSpectra(spectra, cov, ells, params["freqs"].split())
     if clean and params["cleaning"]!=None: signal = signal.lincombo(params["cleaning"])
-    if calib: signal = signal.lincombo(signal.calibrated(signal.get_maps(),calibrange),normalize=False)
+    if calib: signal = signal.lincombo(signal.calibrated(signal.get_maps(),bin(calibrange)),normalize=False)
     return signal
 
 

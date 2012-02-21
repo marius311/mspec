@@ -66,7 +66,7 @@ if __name__=="__main__":
     # Do per detector calibration
     if (str2bool(params.get('do_calibration',True))):
         print "Fitting calibration factors..."
-        calib = dict(flatten([[(m,a) for (m,[(_,a)]) in hat_cls_det.calibrated([m for m in maps if m.fr==fr], slice(150,300)) if m.fr==fr] for fr in freqs]))
+        calib = dict(flatten([[(m,a) for (m,[(_,a)]) in hat_cls_det.calibrated([m for m in maps if m.fr==fr], bin(slice(150,300))) if m.fr==fr] for fr in freqs]))
         for (a,b) in pairs(maps): hat_cls_det[(a,b)] *= calib[a]*calib[b]
     else: calib = defaultdict(lambda: 1)
 
