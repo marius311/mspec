@@ -52,7 +52,7 @@ if __name__=="__main__":
         print "Usage: python signal_to_params.py parameter_file.ini"
         sys.exit()
 
-    bestfit(read_AP_ini(sys.argv[1]), lnl=lnl, init_fn=init, derived_fn=camb_derived)
+    mpi_mcmc(read_AP_ini(sys.argv[1]), lnl=lnl, init_fn=init, derived_fn=camb_derived)
 
     
     
