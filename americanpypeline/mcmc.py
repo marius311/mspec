@@ -118,7 +118,7 @@ def mcmc(start,lnl,init_fn=[],derived_fn=[],step_fn=[]):
         #Get likelihood
         if (test_lnl != np.inf): test_lnl = sum([l(test_params) for l in lnl])
                 
-        mcmc_log(cur_params,"Like="+str(test_lnl)+" Ratio="+str(np.mean(1./array(samples["weight"])))+" Sample="+str(dict([(name,test_params[name]) for name in get_outputted(cur_params)]))) 
+        #mcmc_log(cur_params,"Like="+str(test_lnl)+" Ratio="+str(np.mean(1./array(samples["weight"])))+" Sample="+str(dict([(name,test_params[name]) for name in get_outputted(cur_params)]))) 
 
         if (log(random()) < samples["lnl"][-1]-test_lnl):
 
@@ -216,6 +216,7 @@ def mpi_mcmc(start,lnl,init_fn=[],derived_fn=[],step_fn=[]):
             if (new_params!=None):  
                 mcmc_log(params,"Chain "+str(rank)+": New proposal "+str(zip(get_varied(params),sqrt(diag(new_params["$COV"])))))
                 params.update(new_params)
+            
 
     def mpi_master_fn(samples,source):
         """ 
@@ -439,12 +440,12 @@ def likelihoodplot2d(datx,daty,weights=None,nbins=15,which=[.68,.95],filled=True
     xem, yem = movavg(xe,2), movavg(ye,2)
     (contourf if filled else contour)(xem,yem,transpose(H),levels=confint2d(H, which[::-1]+[0]),colors=color,**kw)
     
-def likelihoodplot1d(dat,weights=None,nbins=30,range=None,maxed=True):
+def likelihoodplot1d(dat,weights=None,nbins=30,range=None,maxed=True,**kw):
     if (weights==None): weights=ones(len(dat))
     H, xe = histogram(dat,bins=nbins,weights=weights,normed=True,range=range)
     if maxed: H=H/max(H)
     xem=movavg(xe,2)
-    plot(xem,H)
+    plot(xem,H,**kw)
 
 def load_chain(filename):
     def load_one_chain(filename):
@@ -456,7 +457,7 @@ def load_chain(filename):
         return Chain([(name,data[:,i] if data!=None else array([])) for (i,name) in enumerate(names)])
         
     dir = os.path.dirname(filename)
-    files = [os.path.join(dir,f) for f in os.listdir(dir) if f.startswith(os.path.basename(filename))]
+    files = [os.path.join(dir,f) for f in os.listdir(dir) if f.startswith(os.path.basename(filename)+'_')]
     if len(files)==1: return load_one_chain(files[0])
     elif len(files)>1: return Chains(load_one_chain(f) for f in files)
     else: raise IOError("File not found: "+filename) 

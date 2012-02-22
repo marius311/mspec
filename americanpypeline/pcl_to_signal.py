@@ -6,6 +6,9 @@
  computed by maps_to_pcl.py
 """ 
 
+import matplotlib
+matplotlib.use('agg')
+
 from americanpypeline import *
 import sys, os, re
 from numpy import *
@@ -57,6 +60,9 @@ if __name__=="__main__":
     else:
         imll=1
         gll2=diag(1./(2*arange(lmax)+1))
+
+    if params.get('deconv_pixwin',True): 
+        for (a,b) in pairs(maps): pcls[(a,b)]/=H.pixwin(2048)[:lmax]**2
 
     #Equation (4), the per detector signal estimate
     print "Calculating per-detector signal..."
