@@ -256,7 +256,7 @@ class PowerSpectra():
         assert all(ell == ells[0] for ell in ells), "Can't add spectra with different ells."
         maps = reduce(lambda x, y: x & y, [set(p.get_maps()) for p in ps])
         spectra = SymmetricTensorDict([(k,sum(p.spectra[k] for p in ps)) for k in pairs(maps)],rank=2)
-        if all([p.cov!=None for p in ps]): cov = SymmetricTensorDict([(k,sum(p.cov[k] for p in ps)) for k in pairs(pairs(maps))],rank=4)
+        if all([p.cov for p in ps]): cov = SymmetricTensorDict([(k,sum(p.cov[k] for p in ps)) for k in pairs(pairs(maps))],rank=4)
         else: cov=None
         return PowerSpectra(spectra,cov,ells[0])
 

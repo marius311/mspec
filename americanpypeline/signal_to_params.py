@@ -21,11 +21,13 @@ def camb_derived(p):
 
 def lnl(p):
     model = get_skymodel(p) 
-#    model.spectra[('143','143')] *= (1 + sum([p['calib143(%i)'%i] for i in range(p["beam_pca"].shape[1])] * p["beam_pca"],axis=1))
-    model = model.sliced(p["binning"](slice(p["lmin"],p["lmax"]))).get_as_matrix(ell_blocks=True).spec[:,1]  
+    model.spectra[('143','143')] *= (1 + sum([p['calib143(%i)'%i] for i in range(p["beam_pca"].shape[1])] * p["beam_pca"],axis=1))
+    model = model.binned(p["binning"]).sliced(p["binning"](slice(p["lmin"],p["lmax"]))).get_as_matrix(ell_blocks=True).spec[:,1]  
     dcl = model - p["signal_mat"].spec
-    return dot(dcl,cho_solve(p["signal_mat"].cov,dcl))/2
-    
+    l = dot(dcl,cho_solve(p["signal_mat"].cov,dcl))/2
+    l += sum(array([p['calib143(%i)'%i] for i in range(p["beam_pca"].shape[1])])**2)/2
+    return l
+
 def get_skymodel(p):
     ells=arange(p["lmax"])
     dgpo = lambda p, ps: skymodel.fg_from_amps(p,ps,"dgpo",ells*(ells+1)/(p["norm_ell"]*(p["norm_ell"]+1)))
