@@ -6,9 +6,6 @@
  computed by maps_to_pcl.py
 """ 
 
-import matplotlib
-matplotlib.use('agg')
-
 from americanpypeline import *
 import sys, os, re
 from numpy import *

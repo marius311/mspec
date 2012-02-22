@@ -29,10 +29,6 @@
                                     accepting names like '100-1a_W_TauDeconv_v47.fits'
      
 """
-import matplotlib
-matplotlib.use('agg')
-
-
 
 from americanpypeline import *
 from utils import *
