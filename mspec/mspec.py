@@ -73,7 +73,7 @@ class PowerSpectra():
     Spectra and covariances are automatically symmetrized, so when one key is added
     other keys which have the same value because of symmetry are also added. For example,
         >> p[('143','217')] = x
-        >> p[('143','217')] == p[('217','143')]
+        >> p[('217','143')] == x
         True
     
     All of the functions on this object automatically propagate uncertainties in the covariance.    
@@ -85,13 +85,16 @@ class PowerSpectra():
         Create a PowerSpectra instance.
         
         Keyword arguments:
-            spectra/cov -- Dicts or SymmetricTensorDicts or block vectors/matrices (for example
-                           the output of PowerSpectra.get_as_matrix()). If they are block vectors/matrices
-                           then maps must be provided. 
-            ells -- An array of ell values which must be the same length as spectra
-                    (default=arange(lmax) where lmax is determined from the length of the spectra)
-            maps -- If spectra and/or cov are provided as block matrices, a list of maps names
-                    must provided to partition the matrices and name the blocks. 
+            spectra/cov -- Dicts or SymmetricTensorDicts or block vectors/matrices 
+                           (for example the output of PowerSpectra.get_as_matrix()).
+                           If they are block vectors/matrices then maps 
+                           must be provided. 
+            ells -- An array of ell values which must be the same length as 
+                    spectra (default=arange(lmax) where lmax is determined from 
+                    the length of the spectra)
+            maps -- If spectra and/or cov are provided as block matrices, a list
+                    of maps names must provided to partition the matrices and 
+                    name the blocks. 
         """
         if (spectra==None): self.spectra = SymmetricTensorDict(rank=2)
         elif (isinstance(spectra,SymmetricTensorDict)): self.spectra = spectra
@@ -177,9 +180,9 @@ class PowerSpectra():
         maps -- Which maps to calibrate
         ells -- An array or a slice object corresponding to the ell range in which
                 to do the calibration.
-        weighting -- The weighting to use when calculating the 'miscalibration'. For example
-                     is the spectra are C_ell's, then weighting = 2*ells+1 corresponds to
-                     map-level calibration. 
+        weighting -- The weighting to use when calculating the 'miscalibration'. 
+                     For example, if the spectra are C_ell's, then 
+                     weighting = 2*ells+1 corresponds to map-level calibration. 
         """
         maps = list(maps)
         fid = mean([self.spectra[(a,b)][ells]*weighting for (a,b) in pairs(maps)],axis=0)
@@ -230,7 +233,8 @@ class PowerSpectra():
         Plot these powerspectra.
         
         Keyword arguments:
-        which -- A list of keys to the spectra which should be plotted (default=all of them)
+        which -- A list of keys to the spectra which should be plotted 
+                 (default=all of them)
         errorbars -- Whether to plot error bars (default=True)
         prefix -- A prefix which shows up in the legend (default="")
         
@@ -279,8 +283,8 @@ class PowerSpectra():
         Returns a binned version of this PowerSpectra. 
         
         Keyword arguments:
-        bin -- Either a binning function which takes as input both vectors and matrices, 
-               or a string which is passed to get_bin_func
+        bin -- Either a binning function which takes as input both vectors 
+               and matrices, or a string which is passed to get_bin_func
         """
         if (type(bin)==str): bin = get_bin_func(bin)
         ps = self.apply_func(lambda _, spec: bin(spec), lambda _, cov: bin(cov))
@@ -329,9 +333,9 @@ def read_Mspec_ini(params,relative_paths=True):
     
     Keyword arguments:
     params -- A string filename, or a dictionary for an already loaded file.
-    relative_path -- If true and params is a filename, all relative paths in the file 
-                     are turned into absolute paths relative to the parameter file 
-                     itself. (default=True)
+    relative_path -- If True and params is a filename, all relative paths in the 
+                     file are turned into absolute paths relative to the parameter
+                     file itself. (default=True)
     """
     if type(params)==str:
         p = read_ini(params)
