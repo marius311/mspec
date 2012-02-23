@@ -6,20 +6,27 @@ from random import random
 from itertools import product, repeat
 from matplotlib.mlab import movavg
 from matplotlib.pyplot import plot, hist, contour, contourf
-from utils import read_ini, try_type
+from utils import read_ini, try_type, confint2d
 from ast import literal_eval
 from numpy.ma.core import transpose, sort
 from numpy.lib.function_base import interp
 
 
-"""
-
-    Runs mcmc chains based off of parameter files and user defined likelihood functions.
-    
-"""
-
-
 def bestfit(start,lnl,init_fn=[],derived_fn=[],step_fn=[]):
+    """
+    Find a best fit point and possibly a Hessian 
+    
+    Parameters:
+        start - dictionary of parameter key/values or a filename
+        lnl - a function (or list of functions) of (dict:params) which returns the negative log-likelihood
+        init_fn = a function (or list of functions) of (dict:params) which is called before starting the minimization
+        derived_fn = a function (or list of functions) of (dict:params) which calculates and adds derived parameters 
+        step_fn - a function (or list of functions) of (dict:params, dict:samples) which is called after every step
+    
+    Returns:
+        The best fit step.
+        
+    """
     #Make lists of the input functions if they aren't
     [lnl,init_fn,derived_fn,step_fn] = map(lambda x: x if type(x)==list else [x],[lnl,init_fn,derived_fn,step_fn])
 
@@ -60,7 +67,6 @@ def bestfit(start,lnl,init_fn=[],derived_fn=[],step_fn=[]):
 
 def mcmc(start,lnl,init_fn=[],derived_fn=[],step_fn=[]):
     """
-    
     Run an MCMC chain. 
     
     Parameters:
@@ -210,7 +216,7 @@ def mpi_mcmc(start,lnl,init_fn=[],derived_fn=[],step_fn=[]):
         This is the worker process code.
         """
         if (sum(samples["weight"])%delta_send_samples==0):
-            mcmc_log(params,"Chain "+str(rank)+": steps="+str(sum(samples["weight"]))+" approval="+str(np.mean(1./array(samples["weight"])))+" best:"+str(min([inf]+samples["lnl"][1:])))
+            mcmc_log(params,"Chain "+str(rank)+": steps="+str(sum(samples["weight"]))+" Mproval="+str(np.mean(1./array(samples["weight"])))+" best:"+str(min([inf]+samples["lnl"][1:])))
             comm.send((rank,wslice(samples,delta_send_samples)))    
             new_params = comm.recv()
             if (new_params!=None):  
@@ -337,17 +343,12 @@ def get_mcmc_params(params,derived=[]):
     
     return processed
 
-def get_varied(params):
-    return params["$VARIED"]
 
-def get_outputted(params):
-    return params["$OUTPUT"]
-
+def get_varied(params): return params["$VARIED"]
+def get_outputted(params): return params["$OUTPUT"]
 
 def propose_step_gaussian(params,fac=None):
-    """
-    Take a gaussian step in $VARIED according to $COV
-    """
+    """Take a gaussian step in $VARIED according to $COV"""
     varied_params = get_varied(params)
     cov = params["$COV"]
     nparams = len(varied_params)
@@ -378,14 +379,12 @@ def initialize_covariance(params):
         for ((i,j),(k,l)) in idxs: params["$COV"][i,j] = prop[k,l]
         
    
-   
 def get_covariance(data,weights=None):
     if (weights==None): return np.cov(data.T)
     else:
         mean = np.sum(data.T*weights,axis=1)/np.sum(weights)
         zdata = data-mean
         return np.dot(zdata.T*weights,zdata)/(np.sum(weights)-1)
-
 
 def get_new_proposal(samples,params):
     nchains = len(samples)
@@ -401,39 +400,78 @@ def gelman_rubin_R(samples):
     
 
 class Chain(dict):
-    def params(self): return set(self.keys())-set(["lnl","weight"])
-    def sample(self,s,keys=None): return Chain((k,self[k][s]) for k in (keys if keys else self.keys()))
-    def matrix(self,params=None): return vstack([self[p] for p in (params if params else self.params())]).T
-    def cov(self,params=None): return get_covariance(self.matrix(params), self["weight"])
-    def mean(self,params=None): return average(self.matrix(params),axis=0,weights=self["weight"])
-    def std(self,params=None): return sqrt(average((self.matrix(params)-self.mean(params))**2,axis=0,weights=self["weight"]))
-    def like1d(self,p,**kw): likelihoodplot1d(self[p],weights=self["weight"],**kw)
-    def like2d(self,p1,p2,**kw): likelihoodplot2d(self[p1], self[p2], weights=self["weight"], **kw)
-    def acceptance(self): return mean(1./self["weight"])
+    """
+    An MCMC chain. This is just a dictionary mapping parameter names
+    to lists of values, along with the special keys 'lnl' and 'weight'
+    """
+    def params(self): 
+        """Returns the parameters in this chain (i.e. the keys except 'lnl' and 'weight'"""
+        return set(self.keys())-set(["lnl","weight"])
+    
+    def sample(self,s,keys=None): 
+        """Return a sample or a range of samples depending on if s is an integer or a slice object."""
+        return Chain((k,self[k][s]) for k in (keys if keys else self.keys()))
+    
+    def matrix(self,params=None):
+        """Return this chain as an nsamp * nparams matrix."""
+        return vstack([self[p] for p in (params if params else self.params())]).T
+    
+    def cov(self,params=None): 
+        """Returns the covariance of the parameters (or some subset of them) in this chain."""
+        return get_covariance(self.matrix(params), self["weight"])
+    
+    def mean(self,params=None): 
+        """Returns the mean of the parameters (or some subset of them) in this chain."""
+        return average(self.matrix(params),axis=0,weights=self["weight"])
+    
+    def std(self,params=None): 
+        """Returns the std of the parameters (or some subset of them) in this chain."""
+        return sqrt(average((self.matrix(params)-self.mean(params))**2,axis=0,weights=self["weight"]))
+    
+    def acceptance(self): 
+        """Returns the acceptance ratio."""
+        return mean(1./self["weight"])
+    
     def savecov(self,file,params=None):
+        """Write the covariance to a file where the first line is specifies the parameter names."""
         if not params: params = self.params()
         with open(file,'w') as f:
             f.write("# "+" ".join(params)+"\n")
             savetxt(f,self.cov(params))
+            
     def savechain(self,file,params=None):
+        """Write the chain to a file where the first line is specifies the parameter names."""
         keys = ['lnl','weight']+list(params if params else self.params())
         with open(file,'w') as f:
             f.write("# "+" ".join(keys)+"\n")
             savetxt(f,self.matrix(keys))
+            
+    def like1d(self,p,**kw): 
+        """Plots 1D likelihood contours for a parameter."""
+        likelihoodplot1d(self[p],weights=self["weight"],**kw)
+        
+    def like2d(self,p1,p2,**kw): 
+        """Plots 2D likelihood contours for a pair of parameters."""
+        likelihoodplot2d(self[p1], self[p2], weights=self["weight"], **kw)
+
+        
         
 class Chains(list):
-    def burnin(self,nsamp): return Chains(c.sample(slice(nsamp,-1)) for c in self)
-    def join(self): return Chain((k,hstack([c[k] for c in self])) for k in self[0].keys())
+    """A list of chains, probably from several an MPI run"""
+    
+    def burnin(self,nsamp): 
+        """Remove the first nsamp samples from each chain."""
+        return Chains(c.sample(slice(nsamp,-1)) for c in self)
+    
+    def join(self): 
+        """Combine the chains into one."""
+        return Chain((k,hstack([c[k] for c in self])) for k in self[0].keys())
+    
     def plot(self,param): 
+        """Plot the value of a parameter as a function of sample number for each chain."""
         for c in self: plot(c[param])
     
     
-def confint2d(hist,which):
-    H=sort(hist.ravel())[::-1]
-    sumH=sum(H)
-    cdf=array([sum(H[H>x])/sumH for x in H])
-    return interp(which,cdf,H)
-
 def likelihoodplot2d(datx,daty,weights=None,nbins=15,which=[.68,.95],filled=True,color='k',**kw):
     if (weights==None): weights=ones(len(datx))
     H,xe,ye = histogram2d(datx,daty,nbins,weights=weights)
@@ -447,7 +485,12 @@ def likelihoodplot1d(dat,weights=None,nbins=30,range=None,maxed=True,**kw):
     xem=movavg(xe,2)
     plot(xem,H,**kw)
 
+
 def load_chain(filename):
+    """
+    If filename is a chain, return a Chain object.
+    If filename is a prefix such that there exists filename_1, filename_2, etc... returns a Chains object
+    """
     def load_one_chain(filename):
         with open(filename) as file:
             names = re.sub("#","",file.readline()).split()

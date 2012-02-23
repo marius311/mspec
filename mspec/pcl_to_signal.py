@@ -1,12 +1,6 @@
 #!/usr/bin/env python
 
-"""
- This script computes an estimate of the signal power spectrum 
- and the covariance of the estimate given some pseudo-powerspectra 
- computed by maps_to_pcl.py
-""" 
-
-from americanpypeline import *
+from mspec import *
 import sys, os, re
 from numpy import *
 from numpy.linalg import norm
@@ -23,9 +17,7 @@ if __name__=="__main__":
         print "Usage: python mask_to_mll.py parameter_file.ini"
         sys.exit()
 
-    utils.NOMPI = True    
-    
-    params = read_AP_ini(sys.argv[1])
+    params = read_Mspec_ini(sys.argv[1])
     lmax = params["lmax"]
     bin = params["binning"]
     ells = arange(lmax)

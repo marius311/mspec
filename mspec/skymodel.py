@@ -1,4 +1,4 @@
-from americanpypeline import *
+from mspec import *
 import pypico
 from utils import *
 from numpy import *
@@ -11,7 +11,7 @@ def cmb(p,ps):
 
 def cmb_wmap(p,ps):
     if "cmb_wmap" in p.keys(): cmb=p["cmb_wmap"]
-    else: p["cmb_wmap"]=cmb=loadtxt(os.path.join(AProotdir,"dat/external/bestfit_lensedCls.dat"))[:p["lmax"],1]
+    else: p["cmb_wmap"]=cmb=loadtxt(os.path.join(Mrootdir,"dat/external/bestfit_lensedCls.dat"))[:p["lmax"],1]
     return PowerSpectra({k:cmb for k in ps})
         
 def dg_po(p,maps):

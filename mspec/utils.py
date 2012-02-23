@@ -6,13 +6,21 @@ import itertools
 import traceback
 from collections import namedtuple
 
+""" When loading files via load_multi, this is the default type to convert them to """
 def_dtype = float64
+    
+""" The Mspec root directory (used for loading some Mspec-wide files) """
+Mrootdir = os.path.abspath(os.path.join(os.path.dirname(__file__),".."))
+
+""" If True, don't even try to load the mpi4py library or use MPI at all """
+NOMPI = False
+
+
 
 def test_sym(m):
+    """ Test the symmetry of a matrix"""
     return max(x for x in ((abs(m-m.T))/((m+m.T)/2.)).flatten() if isfinite(x))
-    
-AProotdir = os.path.abspath(os.path.join(os.path.dirname(__file__),".."))
-NOMPI = False
+
 
 def get_num_threads():
     """
@@ -28,7 +36,9 @@ def get_num_threads():
         return 1
 
 
+
 def get_mpi():
+    """ Return (rank,size,comm) """
     if NOMPI or len([l[2] for l in traceback.extract_stack() if l[2] == 'mpi_map']) > 1:
         (rank,size,comm) = (0,1,None)
     else:
@@ -42,26 +52,19 @@ def get_mpi():
             
     return namedtuple('mpi',['rank','size','comm'])(rank,size,comm)
 
-
-def is_mpi_master():
-    return get_mpi_rank()==0
-
-def get_mpi_rank():
-    return get_mpi().rank
-    
-def get_mpi_size():
-    return get_mpi().size
-
+def is_mpi_master(): return get_mpi_rank()==0
+def get_mpi_rank(): return get_mpi().rank
+def get_mpi_size(): return get_mpi().size
 
 def mpi_map(function,sequence,distribute=False):
     """
-    map parallelized with MPI
-    Assumes this program was called with mpiexec -n $NUM
-    This simply partitions the sequence into $NUM blocks and 
-    each MPI process does the rank-th one
-    If distribute is set to true, every process receives the answer
-    otherwise (default) only the root process does.
-    If this function is called recursively, only the first call will be parallelized
+    A map function parallelized with MPI. If this program was called with mpiexec -n $NUM, 
+    then partitions the sequence into $NUM blocks and each MPI process does the rank-th one.
+    Note: If this function is called recursively, only the first call will be parallelized
+
+    Keyword arguments:
+    distribute -- If true, every process receives the answer
+                  otherwise only the root process does (default=True)
     """
     (rank,size,comm) = get_mpi()
         
@@ -78,25 +81,15 @@ def mpi_map(function,sequence,distribute=False):
                 return []
 
 def load_multi(path):
+    """ Load either path or path.npy """
     if os.path.exists(path+".npy"): return array(load(path+".npy"),dtype=def_dtype)
     elif os.path.exists(path): return loadtxt(path,dtype=def_dtype)
     else: raise IOError("No such file or directory: "+path+".npy or "+path)
 
 def save_multi(path,dat,npy=True):
+    """ Save either path or path.npy """
     if npy: save(path, array(dat,dtype=float32))
     else: savetxt(path,dat)
-    
-def proc_map(function,sequence,nthreads=get_num_threads()):
-    q = Queue()
-    def worker(f,dat,rank,q): q.put((rank,map(f,dat)))
-    workers = [Process(target=worker,args=(function,dat,rank,q)) for (dat,rank) in zip(partition(sequence,nthreads),range(nthreads))]
-    for w in workers: w.start()
-    result = [None]*nthreads
-    for _ in range(nthreads): 
-        rank, dat = q.get()
-        result[rank]=dat
-    for w in workers: w.join()
-    return flatten(result)
     
 def pairs(*arg):
     """
@@ -111,20 +104,16 @@ def pairs(*arg):
     else: raise ValueError("pairs expected one or two lists as an argument")
 
 def flatten(l):
-    """
-    x is a list of lists
-    Returns the lists joined into one
-    """
+    """Returns a list of lists joined into one"""
     return list(itertools.chain(*l))
 
 def partition(list, n):
-    """
-    Partition list into n nearly equal sublists
-    """
+    """Partition list into n nearly equal sublists"""
     division = len(list) / float(n)
     return [list[int(round(division * i)): int(round(division * (i + 1)))] for i in range(n)]
 
 def str2bool(s):
+    """Convert a string to boolean"""
     if type(s)==bool: return s
     elif s.lower() in ["t","true"]: return True
     elif s.lower() in ["f","false"]: return False
@@ -136,15 +125,10 @@ def read_ini(file):
     All lines must be empty or "key = value"
     Comments are denoted by #
     Keys can't start with $ or *
-    
-    Returns a dictionary
     """
     
     class ini_dict(dict):
-        """
-        Override the dictionary class to provide more meaningful error messages
-        """
-        
+        """Override the dictionary class to provide more meaningful error messages"""
         def key_error(self,key):
             return KeyError("Could not find the key '"+key+"' in the ini file '"+file+"'")
             
@@ -170,20 +154,22 @@ def read_ini(file):
 
     return params
 
+
 def cust_legend(colors,labels,**kwargs):
+    """A custom legend"""
     legend([Line2D([0],[0],color=c) for c in colors],labels,**kwargs)
 
 def corrify(m):
+    """Convert a covariance matrix into a correlation matrix"""
     m2=m.copy()
     for i in range(alen(m)): 
         m2[i,:]/=sqrt(m[i,i])
         m2[:,i]/=sqrt(m[i,i])
     return m2
 
+
 def try_type(v):
-    """
-    If v is a numerical string, returns float(v) 
-    """
+    """If v is a numerical string, returns float(v), or recursively try so on a list"""
     if (type(v)==list): return map(try_type,v)
     if (type(v)!=str): return v
     try:
@@ -192,6 +178,13 @@ def try_type(v):
         if (v.lower() in ["t","true"]): return True
         elif (v.lower() in ["f","false"]): return False
         return v
+
+def confint2d(hist,which):
+    """Return """
+    H=sort(hist.ravel())[::-1]
+    sumH=sum(H)
+    cdf=array([sum(H[H>x])/sumH for x in H])
+    return interp(which,cdf,H)
 
 
 """

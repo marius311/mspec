@@ -19,13 +19,23 @@ def_map_regex = "(100|143|217|353).*?([0-9][abc]?)"
 class SymmetricTensorDict(dict):
     """
     A dictionary where keys are either (a,b) or ((a,b),(c,d)). 
-    When a key is added, other keys which have the same value because of symmetry are also added. 
-    The symmetry properties assumed are:
-        (a,b) - Fully symmetric
-        ((a,b),(c,d)) - The symmetry properties of the C_ell covariance (not quite fully symmetric)
+    When a key is added, other keys which have the same value because of symmetry are also added.
+    
+    If created with rank=2 the symmetry properties are 
+        (a,b) = (b,a)
+        
+    If created with rank=4 the symmetry properties are 
+        ((a,b),(c,d)) = ((b,a),(c,d)) = ((a,b),(d,c)) = ((c,d),(a,b))^T
     """
     
     def __init__(self, *args, **kwargs):
+        """
+        If created with rank=2 the symmetry properties are 
+            (a,b) = (b,a)
+        
+        If created with rank=4 the symmetry properties are 
+            ((a,b),(c,d)) = ((b,a),(c,d)) = ((a,b),(d,c)) = ((c,d),(a,b))^T
+        """
         self.rank=kwargs.pop("rank",2)
         assert self.rank in [2,4], "SymmetricTensorDict can only handle rank 2 or 4 tensors."
         dict.__init__(self, *args, **kwargs)
@@ -44,53 +54,66 @@ class SymmetricTensorDict(dict):
 
 
     def get_index_values(self):
-        """
-        Gets all the unique values which one of the indices can take.
-        """
+        """Gets all the unique values which one of the indices can take."""
         if (self.rank==2): return set(i for p in self.keys() for i in p)
         else: return set(i for pp in self.keys() for p in pp for i in p)
 
 
 class PowerSpectra():
     """
-    Holds information about a set of powerspectra with some ell binning and possibly their covariance
+    Holds information about a set of powerspectra and possibly their covariance.
+    
+    Powerspectra are stored in the .spectra field and can also
+    be accessed directly by indexing this object, e.g.
+        >> p[('143','217')] = ...
+        
+    Covariances are stored in the .cov field and can be accessed by,
+        >> p.cov[(('143','217'),('143','217'))] = ...
+        
+    Spectra and covariances are automatically symmetrized, so when one key is added
+    other keys which have the same value because of symmetry are also added. For example,
+        >> p[('143','217')] = x
+        >> p[('143','217')] == p[('217','143')]
+        True
+    
+    All of the functions on this object automatically propagate uncertainties in the covariance.    
     """
     spectra = cov = ells = None
     
-    def __init__(self,*args,**kwargs):
+    def __init__(self,spectra=None,cov=None,ells=None,maps=None):
         """
-        PowerSpectra(**kwargs)
-        PowerSpectra(spectra,cov,ells) where spectra/cov can be dicts or SymmetricTensorDicts
-        PowerSpectra(spectra,cov,ells,maps) where spectra/cov are matrices
+        Create a PowerSpectra instance.
+        
+        Keyword arguments:
+            spectra/cov -- Dicts or SymmetricTensorDicts or block vectors/matrices (for example
+                           the output of PowerSpectra.get_as_matrix()). If they are block vectors/matrices
+                           then maps must be provided. 
+            ells -- An array of ell values which must be the same length as spectra
+                    (default=arange(lmax) where lmax is determined from the length of the spectra)
+            maps -- If spectra and/or cov are provided as block matrices, a list of maps names
+                    must provided to partition the matrices and name the blocks. 
         """
-        if (len(args))==1: self.spectra, = args
-        elif (len(args))==3: self.spectra, self.cov, self.ells = args
-        elif (len(args))==4: self.spectra, self.cov, self.ells, maps = args
-        elif (len(args))==0: self.spectra, self.cov, self.ells, maps = (kwargs.pop(n,None) for n in ["spectra","cov","ells","maps"])
-        else: raise TypeError("Expected 3 or 4 arguments or all named arguments")
-              
-        if (self.spectra==None): self.spectra = SymmetricTensorDict(rank=2)
-        elif (isinstance(self.spectra,SymmetricTensorDict)): pass
-        elif (isinstance(self.spectra,dict)): self.spectra = SymmetricTensorDict(self.spectra,rank=2)
-        elif (isinstance(self.spectra,ndarray)):
+        if (spectra==None): self.spectra = SymmetricTensorDict(rank=2)
+        elif (isinstance(spectra,SymmetricTensorDict)): self.spectra = spectra
+        elif (isinstance(spectra,dict)): self.spectra = SymmetricTensorDict(spectra,rank=2)
+        elif (isinstance(spectra,ndarray)):
             assert maps!=None, "You must provide a list of maps names."
             nps = len(pairs(maps))
-            self.spectra = SymmetricTensorDict(zip(pairs(maps),partition(self.spectra,nps)),rank=2)
+            self.spectra = SymmetricTensorDict(zip(pairs(maps),partition(spectra,nps)),rank=2)
         else: raise ValueError("Expected spectra to be a vector or dictionary.")
             
         if (self.cov==None): self.cov = SymmetricTensorDict(rank=4)
-        elif (isinstance(self.cov,SymmetricTensorDict)): pass
-        elif (isinstance(self.cov,dict)): self.cov = SymmetricTensorDict(self.cov,rank=4)
+        elif (isinstance(cov,SymmetricTensorDict)): self.cov = cov
+        elif (isinstance(cov,dict)): self.cov = SymmetricTensorDict(cov,rank=4)
         elif (isinstance(self.cov,ndarray)):
             assert maps!=None, "You must provide a list of maps names."
             nps = len(pairs(maps))
-            nl = alen(self.cov)/nps
-            self.cov = SymmetricTensorDict([((p1,p2),self.cov[i*nl:(i+1)*nl,j*nl:(j+1)*nl]) for (i,p1) in zip(range(nps),pairs(maps)) for (j,p2) in zip(range(nps),pairs(maps)) if i<=j],rank=4)
+            nl = alen(cov)/nps
+            self.cov = SymmetricTensorDict([((p1,p2),cov[i*nl:(i+1)*nl,j*nl:(j+1)*nl]) for (i,p1) in zip(range(nps),pairs(maps)) for (j,p2) in zip(range(nps),pairs(maps)) if i<=j],rank=4)
         else: raise ValueError("Expected covariance to be a matrix or dictionary.")
               
         assert self.spectra or self.ells!=None, "You must either provide some spectra or some ells"
         if self.ells==None: self.ells = arange(len(self.spectra.values()[0]))
-            
             
     def __getitem__(self,key):
         return self.spectra[key]
@@ -99,23 +122,29 @@ class PowerSpectra():
         self.spectra[key]=value
     
     def get_maps(self):
+        """Gets keys for all maps"""
         return sorted(self.spectra.get_index_values())
 
     def get_spectra(self):
+        """Gets keys for all spectra"""
         return pairs(self.get_maps())
 
     def get_auto_spectra(self):
+        """Gets keys for all auto spectra"""
         return [(m,m) for m in self.get_maps()]
 
     def get_cross_spectra(self):
+        """Gets keys for all cross spectra"""
         return set(self.get_spectra()) - set(self.get_auto_spectra())
 
     def get_as_matrix(self,ell_blocks=False):
         """
-        Gets the spectra and covariance as matrices.
+        Gets the spectra as a single block vector and the covariances as
+        a single block matrix. The return value has fields 'spec' and 'cov. 
         
-        If ell_blocks=True the matrices are block matrices where each blocks corresponds to the same ell
-        otherwise (default) each block corresponds to the same powerspectra. 
+        Keyword arguments:
+        ell_blocks -- If True each block corresponds to the same ell, otherwise each 
+                      block corresponds to the same spectrum. (default=False)
         """
         cov_mat=None
         if ell_blocks:
@@ -133,19 +162,24 @@ class PowerSpectra():
         return namedtuple("SpecCov", ['spec','cov'])(spec_mat,cov_mat)
 
     def save_as_matrix(self,fileroot):
+        """Save the matrix representation of this PowerSpectra to file"""
         spec_mat, cov_mat = self.get_as_matrix()
         save_multi(fileroot+"_spec",spec_mat)
         if cov_mat!=None: save_multi(fileroot+"_cov",cov_mat)    
     
-    def save_as_files(self,fileroot):
-        raise NotImplementedError
-#        os.path.join(params["pcls"],"-".join(d1)+'__'+"-".join(d2)+'.dat'))
-        
-        
     def calibrated(self,maps,ells,weighting=1):
         """
-        Calibrate some to powerspectra to eachother in some ell range with a given ell-weighting.
-        Returns a dictionary of calibration factors which can be passed to PowerSpectra.lincombo
+        Return calibration factors corresponding to calibrating 
+        some maps to their mean. The output of this function can then be passed to 
+        PowerSpectra.lincombo
+        
+        Keyword arguments:
+        maps -- Which maps to calibrate
+        ells -- An array or a slice object corresponding to the ell range in which
+                to do the calibration.
+        weighting -- The weighting to use when calculating the 'miscalibration'. For example
+                     is the spectra are C_ell's, then weighting = 2*ells+1 corresponds to
+                     map-level calibration. 
         """
         maps = list(maps)
         fid = mean([self.spectra[(a,b)][ells]*weighting for (a,b) in pairs(maps)],axis=0)
@@ -157,13 +191,12 @@ class PowerSpectra():
     
     def lincombo(self,new_maps,normalize=True):
         """
-        Recast a signal covariance into some new linear combinations of maps
-        p is a PowerSpectra
-        new_maps is a list of (freq,factor)'p where freq is a frequency in p.maps and factor is 
-        the coefficient for that frequencies contribution.
-        normalize indicates whether to normalize the linear combination so that sum(weights)=1
+        Return a new PowerSpectra corresponding to forming a linear combination of maps.
         
-        Returns a new PowerSpectra structure
+        Keyword arguments:
+        new_maps -- A dictionary mapping the new maps to linear combinations of the old maps.
+                    For example, {'217c': [('217',1),('353',-.14)], '143c': [('143',1),('353',-.038)]}
+        normalize -- Whether to normalize the sum of the weights to 1 (i.e. keep the CMB constant)
         """
         if isinstance(new_maps,dict): new_maps = new_maps.items()
         
@@ -192,7 +225,18 @@ class PowerSpectra():
         
         return PowerSpectra(spectra,cov,self.ells)
     
-    def plot(self,which=None,errorbars=True,prefix="",yscale='linear',xscale='linear',**kwargs):
+    def plot(self,which=None,errorbars=True,prefix="",**kwargs):
+        """
+        Plot these powerspectra.
+        
+        Keyword arguments:
+        which -- A list of keys to the spectra which should be plotted (default=all of them)
+        errorbars -- Whether to plot error bars (default=True)
+        prefix -- A prefix which shows up in the legend (default="")
+        
+        Other arguments:
+        **kwargs -- These are passed through to the plot function.
+        """
         if (which==None): which = pairs(self.get_maps())
         if errorbars and self.cov:
             for (a,b) in which:
@@ -201,26 +245,43 @@ class PowerSpectra():
         else:
             for (a,b) in which:
                 plot(self.ells,self.spectra[(a,b)],label=prefix+str(a)+" x "+str(b),**kwargs)
-        ppyscale(yscale)
-        ppxscale(xscale)
 
 
-    def apply_func(self,fspec,fcov):
+    def apply_func(self,fspec=lambda _,x: x, fcov=lambda _, x: x):
+        """
+        Apply an arbitrary function to each spectrum and covariance.
+        
+        Keyword arguments:
+        fspec -- A function of (k,s) applied to the spectra where k is the 
+                 powerspectrum key and s is the spectrum (default=identity)
+        fspec -- A function of (k,c) applied to the covariances where k is the 
+                 covariance key and c is the covariance (default=identity) 
+        """
         spectra = SymmetricTensorDict([(k,fspec(k,self.spectra[k])) for k in pairs(self.get_maps())],rank=2)
-        if (self.cov): cov = SymmetricTensorDict([(k,fcov(k,self.cov[k])) for k in pairs(pairs(self.get_maps()))],rank=4)
+        if self.cov: cov = SymmetricTensorDict([(k,fcov(k,self.cov[k])) for k in pairs(pairs(self.get_maps()))],rank=4)
         else: cov = None
         return PowerSpectra(spectra,cov,self.ells)
 
-    def to_dl(self):
+    def dl(self):
+        """Multilies all spectra by ell(ell+1)/2/pi"""
         return self.rescaled(self.ells**2/(2*pi))
 
-    def to_cl(self):
+    def cl(self):
+        """Divides all spectra by ell(ell+1)/2/pi"""
         return self.rescaled(2*pi/self.ells**2)
 
     def rescaled(self,fac):
+        """Multiplies all spectra by a constant or ell-dependent factor"""
         return self.apply_func(lambda _, spec: spec*fac, lambda _, cov: cov*outer(fac,fac))
     
     def binned(self,bin):
+        """ 
+        Returns a binned version of this PowerSpectra. 
+        
+        Keyword arguments:
+        bin -- Either a binning function which takes as input both vectors and matrices, 
+               or a string which is passed to get_bin_func
+        """
         if (type(bin)==str): bin = get_bin_func(bin)
         ps = self.apply_func(lambda _, spec: bin(spec), lambda _, cov: bin(cov))
         ps.ells = bin(self.ells)
@@ -228,6 +289,10 @@ class PowerSpectra():
         return ps
     
     def sliced(self,*args):
+        """
+        Slices each spectra. The argument can be a single slice object, or 
+        1, 2, or 3 arguments which are passed to slice.
+        """
         if len(args)==1 and type(args[0])==slice: s=args[0]
         else: s=slice(*args)
         ps = self.apply_func(lambda _, spec: spec[s], lambda _, cov: cov[s,s])
@@ -235,23 +300,19 @@ class PowerSpectra():
         return ps
     
     def diffed(self,fid):
+        """Differences each spectra against a fiducial template"""
         assert alen(fid)==alen(self.ells), "Must difference against power-spectrum with same number of ells"
         return self.apply_func(lambda _, cl: cl-fid, lambda _,cov: cov)
         
     def __add__(self,other):
         return PowerSpectra.sum([self,other])
 
-
     def __sub__(self,other):
-        assert all(self.ells==other.ells), "Can't add spectra with different ells"
-        maps = list(set(self.get_maps()) & set(other.get_maps()))
-        spectra = SymmetricTensorDict([(k,self.spectra[k]-other.spectra[k]) for k in pairs(maps)],rank=2)
-        #TODO: Add covariances
-        return PowerSpectra(spectra,None,self.ells)
-        
+        return PowerSpectra.sum([self,other.rescaled(-1)])
         
     @staticmethod
     def sum(ps):
+        """Return the sum of one or more PowerSpectra."""
         ells = [p.ells for p in ps]
         assert all(ell == ells[0] for ell in ells), "Can't add spectra with different ells."
         maps = reduce(lambda x, y: x & y, [set(p.get_maps()) for p in ps])
@@ -261,12 +322,19 @@ class PowerSpectra():
         return PowerSpectra(spectra,cov,ells[0])
 
 
-def read_AP_ini(p):
+
+def read_Mspec_ini(params,relative_paths=True):
     """
-    Read and process the americanpypeline ini file
+    Read and process an mspec ini file, returning a dictionary.
+    
+    Keyword arguments:
+    params -- A string filename, or a dictionary for an already loaded file.
+    relative_path -- If true and params is a filename, all relative paths in the file 
+                     are turned into absolute paths relative to the parameter file 
+                     itself. (default=True)
     """
-    if type(p)==str:
-        p = read_ini(p)
+    if type(params)==str:
+        p = read_ini(params)
         
         for (k,v) in p.items():
             if (type(v)==str):
@@ -274,12 +342,11 @@ def read_AP_ini(p):
                     pv = literal_eval(v)
                     if isinstance(pv, list): pv = array(pv)
                 except: pv = try_type(v)
-                p[k]=pv
-                
-        p["lmin"]=int(p.get("lmin",0))
-        p["lmax"]=int(p["lmax"])
-#        if "cleaning" in p: p["cleaning"]=[(outmap,[(str(inmap),coeff) for (inmap,coeff) in lc]) for (outmap,lc) in literal_eval(p["cleaning"]).items()]
-#        else: p["cleaning"]=None
+            if relative_paths and type(pv)==str:
+                rel = os.path.abspath(os.path.join(os.path.dirname(params),pv))
+                if os.path.exists(rel): pv=rel
+            p[k]=pv
+            
         p["binning"]=get_bin_func(p.get("binning","none"))
         
     return p
@@ -295,38 +362,36 @@ def alm2cl(alm1,alm2):
     lmax = min(lmax1,lmax2)
     return array(real([(alm1[l]*alm2[l]+2*real(vdot(alm1[H.Alm.getidx(lmax1,l,arange(1,l+1))],alm2[H.Alm.getidx(lmax2,l,arange(1,l+1))])))/(2*l+1) for l in range(lmax)]))
 
-def smooth_alms(alm,wl):
+def skycut_mask(nside,percent,dth=deg2rad(10),apod_fn=lambda x: cos(pi*(x-1)/4)**2):
     """
-    Smooth the given alms with a symmetric kernel with a given powerspectrum
-    """
+    Returns an ring-scheme healpix mask with a given percent of the sphere 
+    masked out around the galactic plane.
     
-    lmax=H.Alm.getlmax(alen(alm))
-    assert lmax<alen(wl), "Please provide smoothing kernel to higher lmax"
-    alm2 = alm.copy()
-    for (l,w) in zip(range(lmax),wl[:lmax]): 
-        alm2[H.Alm.getidx(lmax, l, arange(0,l+1)) % alen(alm)] *= w
+    Keyword arguments:
     
-    return alm2
-
-def skycut_mask(nside,percent,dth=deg2rad(10),taper_fn=lambda x: cos(pi*(x-1)/4)**2):
-    """
-    Returns an NSIDE ring-scheme healpix mask with percent of the sphere masked out around the galactic plane.
-    
-    dth and taper_fn describe the angular extent and apodizing function with which to taper the transition.
-    The default is a Hann window over 10 degrees
+    nside -- The nside of the mask
+    percent -- How much of the sky to mask
+    dth -- The number of radians of apodization (default = 10 degrees)
+    apod_fn -- The apodization function (default = Hann window)
     """
     mask = ones(12*nside**2)
     thcut = arcsin(percent)
     for iz in range(4*nside+1):
         th = arcsin(H.ring2z(nside,iz))
-        mask[H.in_ring(nside,iz,0,pi)] = 0 if abs(th)<thcut-dth/2 else 1 if abs(th)>thcut+dth/2 else taper_fn((abs(th)-thcut)/dth)
+        mask[H.in_ring(nside,iz,0,pi)] = 0 if abs(th)<thcut-dth/2 else 1 if abs(th)>thcut+dth/2 else apod_fn((abs(th)-thcut)/dth)
 
     return mask
 
 
 def get_bin_func(binstr):
     """
-    Returns a binning function bin(x,axis=None) where x can be any rank array and axis specifies the binning axis, or None for all axes 
+    Returns a binning function bin(x,axis=None) where x can be any rank array and 
+    axis specifies the binning axis, or None for all axes.
+    
+    Valid binning functions are:
+    WMAP -- WMAP binning at low-ell, SPT binning at high-ell
+    CTP -- CTP binning
+    flat(x) -- Uniform bins of width x
     """
     binstr = binstr.lower()
     
@@ -335,11 +400,11 @@ def get_bin_func(binstr):
     bindat = None
     
     if (binstr=="ctp"):
-        ctpbins=loadtxt(os.path.join(AProotdir,"dat/bins/CTP_bin_TT_orig"),dtype=int)
+        ctpbins=loadtxt(os.path.join(Mrootdir,"dat/bins/CTP_bin_TT_orig"),dtype=int)
         bindat=[arange(s,e+1) for [s,e] in ctpbins[:,[1,2]]]
     
     if (binstr=='wmap'): 
-            wmapbins=loadtxt(os.path.join(AProotdir,"dat/external/wmap_binned_tt_spectrum_7yr_v4p1.txt"),dtype=int)
+            wmapbins=loadtxt(os.path.join(Mrootdir,"dat/external/wmap_binned_tt_spectrum_7yr_v4p1.txt"),dtype=int)
             bindat=[arange(s,e+1) for [s,e] in wmapbins[:-2,[1,2]]]+[arange(l,l+50) for l in range(1001,2000,50)]+[arange(l,l+200) for l in range(2001,4000,200)]
 
     r = re.match("flat\((?:dl=)?([0-9]+)\)",binstr)
@@ -360,7 +425,18 @@ def get_bin_func(binstr):
 
 
 def load_signal(params, clean=False, calib=False, calibrange=slice(150,500), loadcov=True):
-    params = read_AP_ini(params)
+    """
+    Loads the signal computed by pcl_to_signal.py
+    
+    Keyword arguments:
+    params -- The parameter file
+    clean -- Whether to apply cleaning (default=False)
+    calib --Whether to do inter-frequency calibration (default=False)
+    calibrange -- A slice object corresponding to the range of ells over which
+                  to do the calibration (default=slice(150,500))
+    loadcov -- Whether to load the covariance (default=True)
+    """
+    params = read_Mspec_ini(params)
     bin = params['binning']
     ells, spectra = load_multi(params["signal"]+"_spec").T
     ells = array(sorted(set(ells)))
@@ -374,19 +450,31 @@ def load_signal(params, clean=False, calib=False, calibrange=slice(150,500), loa
     return signal
 
 
-def load_clean_calib_signal(params,calibrange=slice(150,800)):
-    return load_signal(params, True, True, calibrange)
+def load_clean_calib_signal(params, calibrange=slice(150,500), loadcov=True):
+    """
+    Loads the cleaned and calibrated signal computed by pcl_to_signal.py
+    
+    Keyword arguments:
+    params -- The parameter file
+    calibrange -- A slice object corresponding to the range of ells over which
+                  to do the calibration (default=slice(150,500))
+    loadcov -- Whether to load the covariance (default=True)
+    """
+
+    return load_signal(params, True, True, calibrange, loadcov)
 
 
 def load_pcls(params):
-    params = read_AP_ini(params)
+    """Load the pcls computed by maps_to_pcls.py"""
+    params = read_Mspec_ini(params)
     regex=re.compile(params.get("map_regex",def_map_regex))
     files = [(os.path.join(params["pcls"],f),[MapID(m.group(1),'T',m.group(2)) for m in regex.finditer(f)]) for f in os.listdir(params["pcls"])]
     return PowerSpectra({tuple(m):load_multi(f)[:int(params["lmax"])] for (f,m) in files if len(m)==2})
 
 
 def load_beams(params):
-    params = read_AP_ini(params)
+    """Load the beams"""
+    params = read_Mspec_ini(params)
     regex=re.compile(params.get("map_regex",def_map_regex))
     files = [(os.path.join(params["beams"],f),[MapID(m.group(1),'T',m.group(2)) for m in regex.finditer(f)]) for f in os.listdir(params["beams"])]
     beams = SymmetricTensorDict(rank=2)
@@ -401,23 +489,20 @@ def load_beams(params):
     return PowerSpectra(beams)
         
 def load_noise(params):
-    params = read_AP_ini(params)
+    """Load the noise"""
+    params = read_Mspec_ini(params)
     regex=re.compile(params.get("map_regex",def_map_regex))
     files = [(os.path.join(params["noise"],f),regex.search(f)) for f in os.listdir(params["noise"])]
     return dict([(MapID(r.group(1),'T',r.group(2)),load_multi(f)[:int(params["lmax"]),params.get("noise_col",1)]) for (f,r) in files if r!=None])
         
 def cmb_orient(wmap=True,spt=True):
+    """Plot up WMAP and SPT data points"""
     if (wmap):
-        wmap = loadtxt(os.path.join(AProotdir,"dat/external/wmap_binned_tt_spectrum_7yr_v4p1.txt"))
+        wmap = loadtxt(os.path.join(Mrootdir,"dat/external/wmap_binned_tt_spectrum_7yr_v4p1.txt"))
         errorbar(wmap[:,0],wmap[:,3],yerr=wmap[:,4],fmt='.',label='WMAP7')
     if (spt):
-        spt = loadtxt(os.path.join(AProotdir,"dat/external/dl_spt20082009.txt"))
+        spt = loadtxt(os.path.join(Mrootdir,"dat/external/dl_spt20082009.txt"))
         errorbar(spt[:,0],spt[:,1],yerr=spt[:,2],fmt='.',label='SPT K11')
 
-def confint2d(hist,which):
-    H=sort(hist.ravel())[::-1]
-    sumH=sum(H)
-    cdf=array([sum(H[H>x])/sumH for x in H])
-    return interp(which,cdf,H)
 
 

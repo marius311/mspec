@@ -1,26 +1,6 @@
 #!/usr/bin/env python
 
-
-"""
-Given a mask, this script computes the mode coupling matrix and its inverse for both the mask
-and for the mask squared (needed for covariance).
-
-Usage:
-    python mask_to_mll.py param_file.ini
-    
-    where param_file has a line which can look like:
-        mask = ptsrc.fits
-        OR
-        mask = 70% + ptsrc.fits
-    
-    corresponding to a point source mask or a point source mask + 70% sky galactic cut respectively.
-    
-Output:
-    Four files, one for each matrix, are created using the specified fits file as a root file name. 
-    
-"""
-
-from americanpypeline import *
+from mspec import *
 import healpy as H
 import sys, os, re
 from numpy import *
@@ -35,7 +15,7 @@ if __name__=="__main__":
         sys.exit()
         
     #Read in parameter file and get output names
-    params = read_AP_ini(sys.argv[1])
+    params = read_Mspec_ini(sys.argv[1])
     print "Getting mode coupling for '"+params["mask"]+"'"
     
     #Create the healpix mask
