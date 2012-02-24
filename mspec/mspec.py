@@ -350,9 +350,10 @@ def read_Mspec_ini(params,relative_paths=True):
                 rel = os.path.abspath(os.path.join(os.path.dirname(params),pv))
                 if os.path.exists(rel): pv=rel
             p[k]=pv
-            
-        p["binning"]=get_bin_func(p.get("binning","none"))
-        
+            p["binning"]=get_bin_func(p.get("binning","none"))
+    else:
+        p = params
+    
     return p
 
 
@@ -397,6 +398,7 @@ def get_bin_func(binstr):
     CTP -- CTP binning
     flat(x) -- Uniform bins of width x
     """
+    print binstr
     binstr = binstr.lower()
     
     if (binstr=="none"): return lambda x: x
