@@ -42,5 +42,5 @@ if __name__=="__main__":
     
     #Save results
     for (post,mat) in [("mll",m),("imll",im),("mll2",m2),("imll2",im2)]: 
-        savetxt(params["mask"]+"."+post,mat)
+        save_multi(params["mask"]+"."+post,mat)
         print "Saved '"+params["mask"]+"."+post+"'"

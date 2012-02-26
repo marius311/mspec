@@ -114,7 +114,8 @@ class PowerSpectra():
             nl = alen(cov)/nps
             self.cov = SymmetricTensorDict([((p1,p2),cov[i*nl:(i+1)*nl,j*nl:(j+1)*nl]) for (i,p1) in zip(range(nps),pairs(maps)) for (j,p2) in zip(range(nps),pairs(maps)) if i<=j],rank=4)
         else: raise ValueError("Expected covariance to be a matrix or dictionary.")
-              
+        if (ells!=None): self.ells=ells        
+      
         assert self.spectra or self.ells!=None, "You must either provide some spectra or some ells"
         if self.ells==None: self.ells = arange(len(self.spectra.values()[0]))
             
@@ -350,9 +351,10 @@ def read_Mspec_ini(params,relative_paths=True):
                 rel = os.path.abspath(os.path.join(os.path.dirname(params),pv))
                 if os.path.exists(rel): pv=rel
             p[k]=pv
-            
         p["binning"]=get_bin_func(p.get("binning","none"))
-        
+    else:
+        p = params
+    
     return p
 
 
