@@ -1,6 +1,6 @@
 import sys, os, re
 import numpy as np
-from numpy import array, shape, loadtxt, log, genfromtxt, cov, sqrt, diag, vstack, sum, average, hstack, mean, savetxt, histogram, histogram2d, inf
+from numpy import *
 from numpy.linalg import inv
 from random import random
 from itertools import product, repeat

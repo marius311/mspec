@@ -17,7 +17,8 @@ if __name__=="__main__":
     # Read map file names
     regex = re.compile(params.get("map_regex",def_map_regex))
     maps = [(os.path.join(params["maps"],f),regex.search(f)) for f in os.listdir(params["maps"]) if ".fits" in f]
-    maps = sorted([(f,[r.group(1),r.group(2)]) for (f,r) in maps if r])
+    maps = sorted([(f,[r.group(1),r.group(2)]) for (f,r) in maps if r and (not params.get('freqs') or r.group(1) in params['freqs'])])
+    print 'Transforming the following maps:'+str([f for (f,_) in maps])
     
     # Other options
     mask = H.read_map(params["mask"]) if params.get("mask") else None
@@ -47,6 +48,6 @@ if __name__=="__main__":
     
     def almpair2ps((alm1,alm2,output)):
         print "Process "+str(get_mpi_rank())+" is calculating '"+output+"'"
-        savetxt(output,alm2cl(alm1,alm2)*1e12)#/H.pixwin(params["nside"])[:lmax]**2)
+        savetxt(output,alm2cl(alm1,alm2)*1e12)
 
     mpi_map(almpair2ps,almpairs)
