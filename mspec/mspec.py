@@ -105,10 +105,10 @@ class PowerSpectra():
             self.spectra = SymmetricTensorDict(zip(pairs(maps),partition(spectra,nps)),rank=2)
         else: raise ValueError("Expected spectra to be a vector or dictionary.")
             
-        if (self.cov==None): self.cov = SymmetricTensorDict(rank=4)
+        if (cov==None): self.cov = SymmetricTensorDict(rank=4)
         elif (isinstance(cov,SymmetricTensorDict)): self.cov = cov
         elif (isinstance(cov,dict)): self.cov = SymmetricTensorDict(cov,rank=4)
-        elif (isinstance(self.cov,ndarray)):
+        elif (isinstance(cov,ndarray)):
             assert maps!=None, "You must provide a list of maps names."
             nps = len(pairs(maps))
             nl = alen(cov)/nps
