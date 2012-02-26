@@ -1,10 +1,11 @@
 import re, os
 from itertools import combinations_with_replacement, product
-from numpy import load, save, loadtxt, isfinite, float64, array, float32, alen, sqrt
+from numpy import *
 from matplotlib.pyplot import errorbar, legend, Line2D
 import itertools
 import traceback
 from collections import namedtuple
+from numpy.ma.core import sort
 
 """ When loading files via load_multi, this is the default type to convert them to """
 def_dtype = float64

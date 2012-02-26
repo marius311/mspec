@@ -22,7 +22,7 @@ if __name__=="__main__":
     mask = H.read_map(params["mask"])
     
     #Read in other parameters
-    lmax = int(params["lmax"])
+    lmax = int(params["lmax"])+2
     wlmax = min(2*lmax+1,3*H.npix2nside(alen(mask))-1)
     
     print "Getting mask powerspectrum..."
