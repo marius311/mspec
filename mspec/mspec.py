@@ -9,6 +9,7 @@ from scipy.optimize import fmin
 from utils import *
 import healpy as H
 import sys, os, re, gc
+import mcmc
 
 MapID = namedtuple("MapID", ["fr","type","id"])
 MapID.__str__ = MapID.__repr__ = lambda self: "-".join(self)  
@@ -189,7 +190,7 @@ class PowerSpectra():
         fid = mean([self.spectra[(a,b)][ells]*weighting for (a,b) in pairs(maps)],axis=0)
         def miscalib(calib):
             return sum(norm(self.spectra[(a,b)][ells]*weighting*calib[ia]*calib[ib] - fid) for ((a,ia),(b,ib)) in pairs(zip(maps,range(len(maps)))))
-        calib = fmin(miscalib,ones(len(maps)),disp=True)
+        calib = fmin(miscalib,ones(len(maps)))
         return [(newmap,[(newmap,calib[maps.index(newmap)] if newmap in maps else 1)]) for newmap in self.get_maps()]
         
     
@@ -469,6 +470,9 @@ def load_clean_calib_signal(params, calibrange=slice(150,500), loadcov=True):
 
     return load_signal(params, True, True, calibrange, loadcov)
 
+def load_chain(params):
+    params = read_Mspec_ini(params)
+    return mcmc.load_chain(params["file_root"])
 
 def load_pcls(params):
     """Load the pcls computed by maps_to_pcls.py"""
