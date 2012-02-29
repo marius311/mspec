@@ -13,7 +13,14 @@ import sys, os, re, gc
 MapID = namedtuple("MapID", ["fr","type","id"])
 MapID.__str__ = MapID.__repr__ = lambda self: "-".join(self)  
 
+
 def_map_regex = "(100|143|217|353).*?([0-9][abc]?)"
+
+"""
+If relative_path=True when calling read_Mspec_ini, these parameters are
+expanded into absolute path names relative to the parameter file.
+"""
+def_file_params = ['maps','pcls','signal','beams','mask','pico_datafile','chain']
 
 
 class SymmetricTensorDict(dict):
@@ -78,9 +85,9 @@ class PowerSpectra():
     
     All of the functions on this object automatically propagate uncertainties in the covariance.    
     """
-    spectra = cov = ells = None
+    spectra = cov = ells = binning = None
     
-    def __init__(self,spectra=None,cov=None,ells=None,maps=None):
+    def __init__(self,spectra=None,cov=None,ells=None,maps=None,binning=None):
         """
         Create a PowerSpectra instance.
         
@@ -95,6 +102,7 @@ class PowerSpectra():
             maps -- If spectra and/or cov are provided as block matrices, a list
                     of maps names must provided to partition the matrices and 
                     name the blocks. 
+            binning -- Specifies the binning used for these powerspecta. 
         """
         if (spectra==None): self.spectra = SymmetricTensorDict(rank=2)
         elif (isinstance(spectra,SymmetricTensorDict)): self.spectra = spectra
@@ -115,9 +123,12 @@ class PowerSpectra():
             self.cov = SymmetricTensorDict([((p1,p2),cov[i*nl:(i+1)*nl,j*nl:(j+1)*nl]) for (i,p1) in zip(range(nps),pairs(maps)) for (j,p2) in zip(range(nps),pairs(maps)) if i<=j],rank=4)
         else: raise ValueError("Expected covariance to be a matrix or dictionary.")
         if (ells!=None): self.ells=ells        
-      
+        self.binning = binning
+        
         assert self.spectra or self.ells!=None, "You must either provide some spectra or some ells"
-        if self.ells==None: self.ells = arange(len(self.spectra.values()[0]))
+        if self.ells==None: 
+            assert self.binning == None, "If you provide binning, you must also provide the ells."
+            self.ells = arange(len(self.spectra.values()[0]))
             
     def __getitem__(self,key):
         return self.spectra[key]
@@ -189,7 +200,7 @@ class PowerSpectra():
         fid = mean([self.spectra[(a,b)][ells]*weighting for (a,b) in pairs(maps)],axis=0)
         def miscalib(calib):
             return sum(norm(self.spectra[(a,b)][ells]*weighting*calib[ia]*calib[ib] - fid) for ((a,ia),(b,ib)) in pairs(zip(maps,range(len(maps)))))
-        calib = fmin(miscalib,ones(len(maps)),disp=True)
+        calib = fmin(miscalib,ones(len(maps)))
         return [(newmap,[(newmap,calib[maps.index(newmap)] if newmap in maps else 1)]) for newmap in self.get_maps()]
         
     
@@ -227,7 +238,7 @@ class PowerSpectra():
         else:
             cov = None
         
-        return PowerSpectra(spectra,cov,self.ells)
+        return PowerSpectra(spectra,cov,self.ells,binning=self.binning)
     
     def plot(self,which=None,errorbars=True,prefix="",**kwargs):
         """
@@ -265,7 +276,7 @@ class PowerSpectra():
         spectra = SymmetricTensorDict([(k,fspec(k,self.spectra[k])) for k in pairs(self.get_maps())],rank=2)
         if self.cov: cov = SymmetricTensorDict([(k,fcov(k,self.cov[k])) for k in pairs(pairs(self.get_maps()))],rank=4)
         else: cov = None
-        return PowerSpectra(spectra,cov,self.ells)
+        return PowerSpectra(spectra,cov,self.ells,binning=self.binning)
 
     def dl(self):
         """Multilies all spectra by ell(ell+1)/2/pi"""
@@ -279,6 +290,10 @@ class PowerSpectra():
         """Multiplies all spectra by a constant or ell-dependent factor"""
         return self.apply_func(lambda _, spec: spec*fac, lambda _, cov: cov*outer(fac,fac))
     
+    def shifted(self,delta_ell):
+        """Shift the PowerSpectra over by a few ells (for plotting)."""
+        return PowerSpectra(self.spectra, self.cov, self.ells+delta_ell, binning=self.binning)
+    
     def binned(self,bin):
         """ 
         Returns a binned version of this PowerSpectra. 
@@ -290,7 +305,7 @@ class PowerSpectra():
         if (type(bin)==str): bin = get_bin_func(bin)
         ps = self.apply_func(lambda _, spec: bin(spec), lambda _, cov: bin(cov))
         ps.ells = bin(self.ells)
-        ps.bin = bin
+        ps.binning = bin
         return ps
     
     def sliced(self,*args):
@@ -305,8 +320,19 @@ class PowerSpectra():
         return ps
     
     def diffed(self,fid):
-        """Differences each spectra against a fiducial template"""
-        assert alen(fid)==alen(self.ells), "Must difference against power-spectrum with same number of ells"
+        """
+        Differences each spectra against a fiducial template
+        
+        Keyword arguments:
+        fid -- A fiducial template which can either be the same length as the
+               spectra in this PowerSpectra object, or if binning is
+               provided, the a template can be at every ell and
+               will be binned accordingly. 
+        """
+        if alen(fid)!=alen(self.ells):
+            assert self.binning!=None and alen(self.binning(fid))>=alen(self.ells), "Can't figure out how diff against this powerspectrum."
+            fid=self.binning(fid)[:alen(self.ells)]
+        
         return self.apply_func(lambda _, cl: cl-fid, lambda _,cov: cov)
         
     def __add__(self,other):
@@ -324,7 +350,7 @@ class PowerSpectra():
         spectra = SymmetricTensorDict([(k,sum(p.spectra[k] for p in ps)) for k in pairs(maps)],rank=2)
         if all([p.cov for p in ps]): cov = SymmetricTensorDict([(k,sum(p.cov[k] for p in ps)) for k in pairs(pairs(maps))],rank=4)
         else: cov=None
-        return PowerSpectra(spectra,cov,ells[0])
+        return PowerSpectra(spectra,cov,ells[0],binning=ps[0].binning)
 
 
 
@@ -334,9 +360,9 @@ def read_Mspec_ini(params,relative_paths=True):
     
     Keyword arguments:
     params -- A string filename, or a dictionary for an already loaded file.
-    relative_path -- If True and params is a filename, all relative paths in the 
-                     file are turned into absolute paths relative to the parameter
-                     file itself. (default=True)
+    relative_path -- If True and params is a filename, certain values which are 
+                     relative paths are turned into absolute paths relative 
+                     to the parameter file itself. (default=True)
     """
     if type(params)==str:
         p = read_ini(params)
@@ -347,9 +373,14 @@ def read_Mspec_ini(params,relative_paths=True):
                     pv = literal_eval(v)
                     if isinstance(pv, list): pv = array(pv)
                 except: pv = try_type(v)
-            if relative_paths and type(pv)==str:
-                rel = os.path.abspath(os.path.join(os.path.dirname(params),pv))
-                if os.path.exists(rel): pv=rel
+            if relative_paths and type(pv)==str and not os.path.isabs(pv):
+                if k in def_file_params:
+                    pv = os.path.abspath(os.path.join(os.path.dirname(params),pv))
+                elif os.path.exists(pv):
+                    pv = os.path.abspath(pv)
+                else:
+                    rel = os.path.abspath(os.path.join(os.path.dirname(params),pv))
+                    if os.path.exists(rel): pv = rel
             p[k]=pv
         p["binning"]=get_bin_func(p.get("binning","none"))
     else:
@@ -450,7 +481,7 @@ def load_signal(params, clean=False, calib=False, calibrange=slice(150,500), loa
     if loadcov and str2bool(params.get("get_covariance",False)):
         try: cov = load_multi(params["signal"]+"_cov")
         except IOError: pass
-    signal = PowerSpectra(spectra, cov, ells, params["freqs"])
+    signal = PowerSpectra(spectra, cov, ells, params["freqs"],binning=params["binning"])
     if clean and "cleaning" in params: signal = signal.lincombo(params["cleaning"])
     if calib: signal = signal.lincombo(signal.calibrated(signal.get_maps(),calibrange),normalize=False)
     return signal

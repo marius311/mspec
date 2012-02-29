@@ -446,6 +446,10 @@ class Chain(dict):
             f.write("# "+" ".join(keys)+"\n")
             savetxt(f,self.matrix(keys))
             
+    def plot(self,params):
+        """Plot the value of a parameter as a function of sample number."""
+        plot(cumsum(c['weight']),c[param])
+        
     def like1d(self,p,**kw): 
         """Plots 1D likelihood contours for a parameter."""
         likelihoodplot1d(self[p],weights=self["weight"],**kw)
@@ -457,7 +461,7 @@ class Chain(dict):
         
         
 class Chains(list):
-    """A list of chains, probably from several an MPI run"""
+    """A list of chains, probably from several MPI runs"""
     
     def burnin(self,nsamp): 
         """Remove the first nsamp samples from each chain."""
@@ -469,7 +473,7 @@ class Chains(list):
     
     def plot(self,param): 
         """Plot the value of a parameter as a function of sample number for each chain."""
-        for c in self: plot(c[param])
+        for c in self: c.plot(params)
     
     
 def likelihoodplot2d(datx,daty,weights=None,nbins=15,which=[.68,.95],filled=True,color='k',**kw):

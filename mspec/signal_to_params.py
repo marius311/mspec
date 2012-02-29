@@ -19,11 +19,11 @@ def camb_derived(p):
 
 def lnl(p):
     model = get_skymodel(p) 
-    model = model.rescaled((1 + sum([p['calib143(%i)'%i] for i in range(p["beam_pca"].shape[1])] * p["beam_pca"],axis=1)))
+#    model = model.rescaled((1 + sum([p['calib143(%i)'%i] for i in range(p["beam_pca"].shape[1])] * p["beam_pca"],axis=1)))
     model = model.binned(p["binning"]).sliced(p["binning"](slice(p["lmin"],p["lmax"]))).get_as_matrix(ell_blocks=True).spec[:,1]  
     dcl = model - p["signal_mat"].spec
     l = dot(dcl,cho_solve(p["signal_mat"].cov,dcl))/2
-    l += sum(array([p['calib143(%i)'%i] for i in range(p["beam_pca"].shape[1])])**2)/2
+#    l += sum(array([p['calib143(%i)'%i] for i in range(p["beam_pca"].shape[1])])**2)/2
     return l
 
 def get_skymodel(p):
@@ -48,7 +48,7 @@ def init(p):
     p["signal_mat"]=p["signal"].get_as_matrix(ell_blocks=True)
     p["signal_mat"]=namedtuple("SpecCov",["spec","cov"])(p["signal_mat"].spec[:,1],cho_factor(p["signal_mat"].cov))
     
-    p["beam_pca"] = loadtxt(p["beam_pca"])[:p["lmax"],2:4]
+#    if "beam_pca" in p: p["beam_pca"] = loadtxt(p["beam_pca"])[:p["lmax"],2:4]
     
 if __name__=="__main__":
     

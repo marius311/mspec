@@ -83,8 +83,8 @@ if __name__=="__main__":
         print "Calculating fiducial signal..."
         fid_cls = PowerSpectra(ells=ells)
         for (a,b) in pairs(maps): 
-            fid_cls[(a,b)] = smooth(dot(imll,pcls[(a,b)])*(ells+2)**2,window_len=50)/(ells+2)**2*calib[a]*calib[b]
-            fid_cls[(a,b)][:10] = 0
+            fid_cls[(a,b)] = smooth(dot(imll,pcls[(a,b)])*(ells+2)**2,window_len=150)/(ells+2)**2*calib[a]*calib[b]
+            fid_cls[(a,b)][:100] = 0
 
     
     if str2bool(params.get("get_covariance",True)):
@@ -113,8 +113,6 @@ if __name__=="__main__":
             hat_cls_freq.cov[((alpha,beta),(gamma,delta))] = \
                 sum(weight(a,b)*weight(c,d)*hat_cls_det.cov[((a,b),(c,d))] for ((a,b),(c,d)) in abcds) \
                 / sum(weight(a,b)*weight(c,d) for ((a,b),(c,d)) in abcds)
-
             
-    
     hat_cls_freq.save_as_matrix(params["signal"])
 

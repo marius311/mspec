@@ -87,8 +87,11 @@ def load_multi(path):
     elif os.path.exists(path): return loadtxt(path,dtype=def_dtype)
     else: raise IOError("No such file or directory: "+path+".npy or "+path)
 
-def save_multi(path,dat,npy=True):
+def save_multi(path,dat,npy=True, mkdir=True):
     """ Save either path or path.npy """
+    if mkdir and not os.path.exists(os.path.dirname(path)): 
+        print "Creating folder '"+os.path.dirname(path)+"'"
+        os.makedirs(os.path.dirname(path))
     if npy: save(path, array(dat,dtype=float32))
     else: savetxt(path,dat)
     
