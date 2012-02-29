@@ -33,7 +33,6 @@ def get_skymodel(p):
     dgpo = lambda p, ps: skymodel.fg_from_amps(p,ps,"dgpo",ells*(ells+1.)/(p["norm_ell"]*(p["norm_ell"]+1)))
     radio = lambda p, ps: skymodel.fg_from_amps(p,ps,"radio",ells*(ells+1.)/(p["norm_ell"]*(p["norm_ell"]+1)))
     comps = [skymodel.cmb,dgpo,radio]
-    print dgpo(p,pairs(p["signal"].get_maps()))[('143c','143c')]
     return PowerSpectra.sum([comp(p,pairs(p["signal"].get_maps())) for comp in comps])
         
 def init(p):
