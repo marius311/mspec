@@ -295,6 +295,13 @@ class PowerSpectra():
         """Shift the PowerSpectra over by a few ells (for plotting)."""
         return PowerSpectra(self.spectra, self.cov, self.ells+delta_ell, binning=self.binning)
     
+    def unbinned(self):
+        """
+        Returns an unbinned (interpolated) version of this PowerSpectra.
+        The covariance is lost in the transformation.
+        """
+        return PowerSpectra({k:interp(arange(self.ells[0],self.ells[-1]), self.ells,self[k]) for k in self.get_spectra()})
+    
     def binned(self,bin):
         """ 
         Returns a binned version of this PowerSpectra. 
@@ -461,6 +468,16 @@ def get_bin_func(binstr):
     if bindat!=None: return bin
     else: raise ValueError("Unknown binning function '"+binstr+"'")
 
+def clean_signal(sig,clean,weight=1,range=slice(0,-1)):
+    """
+    Cleans all the power spectra in sig except for 'clean' by using 'clean' 
+    as a template and minimizing the total power in the cleaned spectra. 
+    """
+    from scipy.optimize import fmin
+    sigu = sig.unbinned()
+    return {m: [(m,1),
+                (clean,fmin(lambda x: sum(weight[range]*(sigu[(m,m)][range]-2*x*sigu[(m,clean)][range]+x**2*sigu[(clean,clean)][range]))/(1-2*x+x**2),.05,disp=False)[0])] 
+            for m in set(sig.get_maps())-set([clean])}  
 
 def load_signal(params, clean=False, calib=False, calibrange=slice(150,500), loadcov=True):
     """

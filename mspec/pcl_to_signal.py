@@ -68,7 +68,7 @@ if __name__=="__main__":
     
     # Equation (6), the per frequency signal estimate
     if (is_mpi_master()): print "Calculating signal..."
-    hat_cls_freq = PowerSpectra(ells=bin(ells))
+    hat_cls_freq = PowerSpectra(ells=bin(ells),binning=params["binning"])
     for (alpha,beta) in pairs(freqs):
         hat_cls_freq[(alpha,beta)] = sum(
                 hat_cls_det[(a,b)]*weight(a,b) 
