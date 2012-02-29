@@ -429,6 +429,15 @@ class Chain(dict):
         """Returns the acceptance ratio."""
         return 1./mean(self["weight"])
     
+    def thin(self,delta):
+        """Take every delta samples."""
+        c=ceil(cumsum([0]+self['weight'])/float(delta))
+        ids=where(c[1:]>c[:-1])[0]
+        weight=diff(c[[0]+list(ids+1)])
+        t=self.sample(ids)
+        t['weight']=weight
+        return t
+    
     def savecov(self,file,params=None):
         """Write the covariance to a file where the first line is specifies the parameter names."""
         if not params: params = self.params()
