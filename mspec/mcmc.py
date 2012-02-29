@@ -446,9 +446,9 @@ class Chain(dict):
             f.write("# "+" ".join(keys)+"\n")
             savetxt(f,self.matrix(keys))
             
-    def plot(self,params):
+    def plot(self,param):
         """Plot the value of a parameter as a function of sample number."""
-        plot(cumsum(c['weight']),c[param])
+        plot(cumsum(self['weight']),self[param])
         
     def like1d(self,p,**kw): 
         """Plots 1D likelihood contours for a parameter."""
@@ -473,7 +473,7 @@ class Chains(list):
     
     def plot(self,param): 
         """Plot the value of a parameter as a function of sample number for each chain."""
-        for c in self: c.plot(params)
+        for c in self: c.plot(param)
     
     
 def likelihoodplot2d(datx,daty,weights=None,nbins=15,which=[.68,.95],filled=True,color='k',**kw):
