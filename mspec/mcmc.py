@@ -124,7 +124,7 @@ def mcmc(start,lnl,init_fn=[],derived_fn=[],step_fn=[]):
         #Get likelihood
         if (test_lnl != np.inf): test_lnl = sum([l(test_params) for l in lnl])
                 
-        mcmc_log(cur_params,"Like="+str(test_lnl)+" Ratio="+str(np.mean(1./array(samples["weight"])))+" Sample="+str(dict([(name,test_params[name]) for name in get_outputted(cur_params)]))) 
+        #mcmc_log(cur_params,"Like="+str(test_lnl)+" Ratio="+str(np.mean(1./array(samples["weight"])))+" Sample="+str(dict([(name,test_params[name]) for name in get_outputted(cur_params)]))) 
 
         if (log(random()) < samples["lnl"][-1]-test_lnl):
 
@@ -216,7 +216,7 @@ def mpi_mcmc(start,lnl,init_fn=[],derived_fn=[],step_fn=[]):
         This is the worker process code.
         """
         if (sum(samples["weight"])%delta_send_samples==0):
-            mcmc_log(params,"Chain "+str(rank)+": steps="+str(sum(samples["weight"]))+" Mproval="+str(np.mean(1./array(samples["weight"])))+" best:"+str(min([inf]+samples["lnl"][1:])))
+            mcmc_log(params,"Chain "+str(rank)+": steps="+str(sum(samples["weight"]))+" approval="+str(np.mean(1./array(samples["weight"])))+" best:"+str(min([inf]+samples["lnl"][1:])))
             comm.send((rank,wslice(samples,delta_send_samples)))    
             new_params = comm.recv()
             if (new_params!=None):  
@@ -502,7 +502,7 @@ def load_chain(filename):
             except: data = None
             
         return Chain([(name,data[:,i] if data!=None else array([])) for (i,name) in enumerate(names)])
-        
+    
     dir = os.path.dirname(filename)
     files = [os.path.join(dir,f) for f in os.listdir(dir) if f.startswith(os.path.basename(filename)+'_')]
     if len(files)==1: return load_one_chain(files[0])

@@ -9,6 +9,7 @@ from scipy.optimize import fmin
 from utils import *
 import healpy as H
 import sys, os, re, gc
+import mcmc
 
 MapID = namedtuple("MapID", ["fr","type","id"])
 MapID.__str__ = MapID.__repr__ = lambda self: "-".join(self)  
@@ -500,6 +501,9 @@ def load_clean_calib_signal(params, calibrange=slice(150,500), loadcov=True):
 
     return load_signal(params, True, True, calibrange, loadcov)
 
+def load_chain(params):
+    params = read_Mspec_ini(params)
+    return mcmc.load_chain(params["file_root"])
 
 def load_pcls(params):
     """Load the pcls computed by maps_to_pcls.py"""
