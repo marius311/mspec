@@ -510,7 +510,7 @@ def load_chain(filename):
         return Chain([(name,data[:,i] if data!=None else array([])) for (i,name) in enumerate(names)])
     
     dir = os.path.dirname(filename)
-    files = [os.path.join(dir,f) for f in os.listdir(dir) if f.startswith(os.path.basename(filename))]
+    files = [os.path.join(dir,f) for f in os.listdir('.' if dir=='' else dir) if f.startswith(os.path.basename(filename)+'_') or f==os.path.basename(filename)]
     if len(files)==1: return load_one_chain(files[0])
     elif len(files)>1: return Chains(filter(lambda c: c!={}, (load_one_chain(f) for f in files)))
     else: raise IOError("File not found: "+filename) 
