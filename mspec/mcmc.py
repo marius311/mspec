@@ -124,8 +124,8 @@ def mcmc(start,lnl,init_fn=[],derived_fn=[],step_fn=[]):
         #Get likelihood
         if (test_lnl != np.inf): test_lnl = sum([l(test_params) for l in lnl])
                 
-        if not test_params.get('$MPI',False): 
-            print "Like=%.2f Ratio=%.3f Sample=%s" % (test_lnl,np.mean(1./array(samples["weight"])),dict([(name,test_params[name]) for name in get_outputted(cur_params)])) 
+        if not test_params.get('$MPI',False) and test_params.get("mcmc_verbose",True): 
+            print "Like=%.2f Ratio=%.3f Sample=%s" % (test_lnl,1./np.mean(array(samples["weight"])),dict([(name,test_params[name]) for name in get_outputted(cur_params)])) 
 
         if (log(random()) < samples["lnl"][-1]-test_lnl):
 
