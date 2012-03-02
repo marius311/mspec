@@ -54,13 +54,13 @@ if __name__=="__main__":
         for (a,b) in pairs(maps): pcls[(a,b)]/=H.pixwin(2048)[:lmax]**2
 
     #Equation (4), the per detector signal estimate
-    print "Calculating per-detector signal..."
+    if (is_mpi_master()): print "Calculating per-detector signal..."
     hat_cls_det = PowerSpectra(ells=bin(ells))
     for (a,b) in pairs(maps): hat_cls_det[(a,b)] = bin((dot(imll,pcls[(a,b)]) - (noise[a] if a==b else 0))/(beam[(a,b)]))
 
     # Do per detector calibration
     if (str2bool(params.get('do_calibration',True))):
-        print "Fitting calibration factors..."
+        if (is_mpi_master()): print "Fitting calibration factors..."
         calib = dict(flatten([[(m,a) for (m,[(_,a)]) in hat_cls_det.calibrated([m for m in maps if m.fr==fr], bin(slice(150,300))) if m.fr==fr] for fr in freqs]))
         for (a,b) in pairs(maps): hat_cls_det[(a,b)] *= calib[a]*calib[b]
     else: calib = defaultdict(lambda: 1)
@@ -80,39 +80,40 @@ if __name__=="__main__":
     
     # The fiducial model for the mask deconvolved Cl's which gets used in the covariance
     if str2bool(params.get("get_covariance",False)):
-        print "Calculating fiducial signal..."
+        if (is_mpi_master()): print "Calculating fiducial signal..."
         fid_cls = PowerSpectra(ells=ells)
         for (a,b) in pairs(maps): 
-            fid_cls[(a,b)] = smooth(dot(imll,pcls[(a,b)])*(ells+2)**2,window_len=150)/(ells+2)**2*calib[a]*calib[b]
-            fid_cls[(a,b)][:100] = 0
+            fid_cls[(a,b)] = smooth(dot(imll,pcls[(a,b)])*(ells+2)**2,window_len=50)/(ells+2)**2*calib[a]*calib[b]
+            fid_cls[(a,b)][:20] = 0
 
     
     if str2bool(params.get("get_covariance",True)):
         if (is_mpi_master()): print "Calculating detector covariance..."
-        for ((a,b),(c,d)) in pairs(pairs(maps)):
+        def entry(((a,b),(c,d))):
             if weight(a,b)*weight(c,d)!=0:
-                if (is_mpi_master()): print "Calculating the "+str(((str(a),str(b)),(str(c),str(d))))+" entry."
+                print "Calculating the "+str(((str(a),str(b)),(str(c),str(d))))+" entry."
                 # Equation (5)
                 pclcov = (lambda x: x+x.T)(outer(fid_cls[(a,c)],fid_cls[(b,d)]) + outer(fid_cls[(a,d)],fid_cls[(b,c)]))*gll2/2
                 # Equation (7)
-                hat_cls_det.cov[((a,b),(c,d))] = \
-                    dot(bin(imll/transpose([beam[(a,b)]]),axis=0),dot(pclcov,bin(imll.T/(beam[(c,d)]),axis=1))) \
-                    *calib[a]*calib[b]*calib[c]*calib[d]
+                return (((a,b),(c,d)),dot(bin(imll/transpose([beam[(a,b)]]),axis=0),dot(pclcov,bin(imll.T/(beam[(c,d)]),axis=1))) *calib[a]*calib[b]*calib[c]*calib[d])
             else:
-                hat_cls_det.cov[((a,b),(c,d))] = 0
+                return (((a,b),(c,d)),0)
+
+        hat_cls_det.cov=SymmetricTensorDict(mpi_map(entry,pairs(pairs(maps))),rank=4)
         
         # Equation (9)
-        if (is_mpi_master()): print "Calculating covariance..."
-        for ((alpha,beta),(gamma,delta)) in pairs(pairs(freqs)):
-            if (is_mpi_master()): print "Calculating the "+str(((alpha,beta),(gamma,delta)))+" entry."
+        if (is_mpi_master()): 
+            print "Calculating covariance..."
+            for ((alpha,beta),(gamma,delta)) in pairs(pairs(freqs)):
+                if (is_mpi_master()): print "Calculating the "+str(((alpha,beta),(gamma,delta)))+" entry."
 
-            abcds=[((a,b),(c,d)) 
-                   for (a,b) in pairs(maps) for (c,d) in pairs(maps)
-                   if a.fr==alpha and b.fr==beta and c.fr==gamma and d.fr==delta]
+                abcds=[((a,b),(c,d)) 
+                       for (a,b) in pairs(maps) for (c,d) in pairs(maps)
+                       if a.fr==alpha and b.fr==beta and c.fr==gamma and d.fr==delta]
+                
+                hat_cls_freq.cov[((alpha,beta),(gamma,delta))] = \
+                    sum(weight(a,b)*weight(c,d)*hat_cls_det.cov[((a,b),(c,d))] for ((a,b),(c,d)) in abcds) \
+                    / sum(weight(a,b)*weight(c,d) for ((a,b),(c,d)) in abcds)
             
-            hat_cls_freq.cov[((alpha,beta),(gamma,delta))] = \
-                sum(weight(a,b)*weight(c,d)*hat_cls_det.cov[((a,b),(c,d))] for ((a,b),(c,d)) in abcds) \
-                / sum(weight(a,b)*weight(c,d) for ((a,b),(c,d)) in abcds)
-            
-    hat_cls_freq.save_as_matrix(params["signal"])
+    if (is_mpi_master()): hat_cls_freq.save_as_matrix(params["signal"])
 
