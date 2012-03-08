@@ -153,7 +153,7 @@ def read_ini(file):
             raise SyntaxError("Error parsing "+file+". Expected one \"=\" in line '"+line+"'")
         elif (tokens[0][0] in ["$","*"]):
             raise SyntaxError("Error parsing "+file+". Key can't start with "+tokens[0][0]+". '"+line+"'")
-        else:
+        elif tokens[1]!='':
             params[tokens[0]] = tokens[1]
 
     return params

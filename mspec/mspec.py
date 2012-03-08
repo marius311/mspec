@@ -11,6 +11,7 @@ import healpy as H
 import sys, os, re, gc
 import mcmc
 
+
 MapID = namedtuple("MapID", ["fr","type","id"])
 MapID.__str__ = MapID.__repr__ = lambda self: "-".join(self)  
 
@@ -561,6 +562,3 @@ def cmb_orient(wmap=True,spt=True):
     if (spt):
         spt = loadtxt(os.path.join(Mrootdir,"dat/external/dl_spt20082009.txt"))
         errorbar(spt[:,0],spt[:,1],yerr=spt[:,2],fmt='.',label='SPT K11')
-
-
-

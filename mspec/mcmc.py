@@ -37,12 +37,12 @@ def bestfit(start,lnl,init_fn=[],derived_fn=[],step_fn=[]):
     #Call initialization functions
     for fn in init_fn: fn(params)
 
-#    params = propose_step_gaussian(params)
+    params = propose_step_gaussian(params,fac=1)
     
     def flnl(x):
         params.update(dict(zip(get_varied(params),x)))
         test_lnl = sum([l(params) for l in lnl])
-        print "Like=%.2f Sample=%s"%(test_lnl,dict([(name,params[name]) for name in get_outputted(params)]))
+        if not params.get('quiet',False): print "Like=%.2f Sample=%s"%(test_lnl,dict([(name,params[name]) for name in get_outputted(params)]))
         return test_lnl
 
     from scipy.optimize import fmin
