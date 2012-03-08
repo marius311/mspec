@@ -84,7 +84,7 @@ if __name__=="__main__":
         fid_cls = PowerSpectra(ells=ells)
         for (a,b) in pairs(maps): 
             fid_cls[(a,b)] = smooth(dot(imll,pcls[(a,b)])*(ells+2)**2,window_len=50)/(ells+2)**2*calib[a]*calib[b]
-            fid_cls[(a,b)][:20] = 0
+            fid_cls[(a,b)][:20] = 1000/arange(1,21)**2*2*pi
 
     
     if str2bool(params.get("get_covariance",True)):
