@@ -109,7 +109,7 @@ def mcmc(start,lnl,init_fn=[],derived_fn=[],step_fn=[]):
     else:
         output_to_file = False
     
-    cur_params = propose_step_gaussian(cur_params,fac=10)
+    #cur_params = propose_step_gaussian(cur_params,fac=10)
     
     #Start the MCMC
     print "Starting chain..."

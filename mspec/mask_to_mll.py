@@ -10,12 +10,8 @@ from numpy.linalg import inv
 
 
 if __name__=="__main__":
-    if (len(sys.argv) != 2): 
-        print "Usage: python mask_to_mll.py parameter_file.ini"
-        sys.exit()
-        
     #Read in parameter file and get output names
-    params = read_Mspec_ini(sys.argv[1])
+    params = read_Mspec_ini(sys.argv[1:])
     print "Getting mode coupling for '"+params["mask"]+"'"
     
     #Create the healpix mask

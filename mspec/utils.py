@@ -159,9 +159,9 @@ def read_ini(file):
     return params
 
 
-def cust_legend(colors,labels,**kwargs):
+def cust_legend(opts,labels,**kwargs):
     """A custom legend"""
-    legend([Line2D([0],[0],color=c) for c in colors],labels,**kwargs)
+    legend([Line2D([0],[0],**o) for o in opts],labels,**kwargs)
 
 def corrify(m):
     """Convert a covariance matrix into a correlation matrix"""

@@ -8,17 +8,13 @@ import healpy as H
 
 if __name__=="__main__":
 
-    if (len(sys.argv) != 2): 
-        print "Usage: python maps_to_pcl.py parameter_file.ini"
-        sys.exit()
-       
-    params = read_Mspec_ini(sys.argv[1])
+    params = read_Mspec_ini(sys.argv[1:])
     
     # Read map file names
     regex = re.compile(params.get("map_regex",def_map_regex))
     maps = [(os.path.join(params["maps"],f),regex.search(f)) for f in os.listdir(params["maps"]) if ".fits" in f]
     maps = sorted([(f,[r.group(1),r.group(2)]) for (f,r) in maps if r and ('freqs' not in params or r.group(1) in params['freqs'])])
-    print 'Found the following maps:\n '+"\n ".join([os.path.basename(f)+' ('+str(MapID(fr,'T',id))+')' for (f,(fr,id)) in maps])
+    if (is_mpi_master()): print 'Found the following maps:\n '+"\n ".join([os.path.basename(f)+' ('+str(MapID(fr,'T',id))+')' for (f,(fr,id)) in maps])
      
     # Other options
     mask = H.read_map(params["mask"]) if params.get("mask") else None

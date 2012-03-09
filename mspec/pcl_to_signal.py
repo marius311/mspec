@@ -13,11 +13,7 @@ from bisect import bisect_right
 
 if __name__=="__main__": 
     
-    if (len(sys.argv) != 2): 
-        print "Usage: python mask_to_mll.py parameter_file.ini"
-        sys.exit()
-
-    params = read_Mspec_ini(sys.argv[1])
+    params = read_Mspec_ini(sys.argv[1:])
     lmax = params["lmax"]
     bin = params["binning"]
     ells = arange(lmax)

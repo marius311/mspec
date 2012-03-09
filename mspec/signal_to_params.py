@@ -37,7 +37,7 @@ def get_skymodel(p):
         
 def init(p):
     p["warn"]=False
-    if ("pico_datafile" in p):
+    if ("pico_datafile" in p and p.get('use_pico',False)):
         print "Initializing PICO..."
         pypico.picoinit(p["pico_datafile"],verbose=p.get("pico_verbose",True))
     if ("wmadata_dir" in p):
@@ -54,11 +54,7 @@ def init(p):
     
 if __name__=="__main__":
     
-    if (len(sys.argv) != 2): 
-        print "Usage: python signal_to_params.py parameter_file.ini"
-        sys.exit()
-
-    mpi_mcmc(read_Mspec_ini(sys.argv[1]), lnl=lnl, init_fn=init, derived_fn=camb_derived)
+    mpi_mcmc(read_Mspec_ini(sys.argv[1:]), lnl=lnl, init_fn=init, derived_fn=camb_derived)
 
     
     

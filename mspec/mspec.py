@@ -1,6 +1,6 @@
 from ast import literal_eval
 from bisect import bisect_right, bisect_left
-from collections import namedtuple
+from collections import namedtuple, defaultdict
 from matplotlib.pyplot import plot, errorbar, contour, yscale as ppyscale, xscale as ppxscale
 from matplotlib.mlab import movavg
 from numpy import *
@@ -372,29 +372,33 @@ def read_Mspec_ini(params,relative_paths=True):
                      relative paths are turned into absolute paths relative 
                      to the parameter file itself. (default=True)
     """
-    if type(params)==str:
-        p = read_ini(params)
-        
-        for (k,v) in p.items():
-            if (type(v)==str):
-                try: 
-                    pv = literal_eval(v)
-                    if isinstance(pv, list): pv = array(pv)
-                except: pv = try_type(v)
-            if relative_paths and type(pv)==str and not os.path.isabs(pv):
-                if k in def_file_params:
-                    pv = os.path.abspath(os.path.join(os.path.dirname(params),pv))
-                elif os.path.exists(pv):
-                    pv = os.path.abspath(pv)
-                else:
-                    rel = os.path.abspath(os.path.join(os.path.dirname(params),pv))
-                    if os.path.exists(rel): pv = rel
-            p[k]=pv
-        p["binning"]=get_bin_func(p.get("binning","none"))
-    else:
-        p = params
     
-    return p
+    if type(params)!=list: params=[params]
+    mp = {}
+
+    for param in params:
+        if type(param)==str:
+            p = read_ini(param)
+            for (k,v) in p.items():
+                if (type(v)==str):
+                    try: 
+                        pv = literal_eval(v)
+                        if isinstance(pv, list): pv = array(pv)
+                    except: pv = try_type(v)
+                if relative_paths and type(pv)==str and not os.path.isabs(pv):
+                    if k in def_file_params:
+                        pv = os.path.abspath(os.path.join(os.path.dirname(param),pv))
+                    elif os.path.exists(pv):
+                        pv = os.path.abspath(pv)
+                    else:
+                        rel = os.path.abspath(os.path.join(os.path.dirname(param),pv))
+                        if os.path.exists(rel): pv = rel
+                mp[k]=pv
+        else:
+            mp.update(param)
+    
+    if 'binning' not in mp or type(mp['binning'])==str: mp["binning"]=get_bin_func(mp.get("binning","none"))
+    return mp
 
 
 
@@ -499,7 +503,7 @@ def load_signal(params, clean=False, calib=False, calibrange=slice(150,500), loa
     if loadcov and str2bool(params.get("get_covariance",False)):
         try: cov = load_multi(params["signal"]+"_cov")
         except IOError: pass
-    signal = PowerSpectra(spectra, cov, ells, params["freqs"],binning=params["binning"])
+    signal = PowerSpectra(spectra, cov, ells, params.get("freqs"),binning=params["binning"])
     if clean and "cleaning" in params: signal = signal.lincombo(params["cleaning"])
     if calib: signal = signal.lincombo(signal.calibrated(signal.get_maps(),calibrange),normalize=False)
     return signal
@@ -552,7 +556,20 @@ def load_noise(params):
     regex=re.compile(params.get("map_regex",def_map_regex))
     files = [(os.path.join(params["noise"],f),regex.search(f)) for f in os.listdir(params["noise"])]
     return dict([(MapID(r.group(1),'T',r.group(2)),load_multi(f)[:int(params["lmax"]),params.get("noise_col",1)]) for (f,r) in files if r!=None])
-        
+       
+def init_chain_params(params):
+    """
+    Loads a parameter file and returns a set of parameters preprocessed
+    in the same way they are during an MCMC chain, so that you can call
+    the functions from M.sig on them.
+    """
+    import signal_to_params as sig
+    params = read_Mspec_ini(params)
+    sig.init(params)
+    params=mcmc.get_mcmc_params(params)
+    params.add_derived(sig.camb_derived)
+    return params
+
 def cmb_orient(wmap=True,spt=True):
     """Plot up WMAP and SPT data points"""
     if (wmap):
