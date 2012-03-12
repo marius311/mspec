@@ -57,7 +57,14 @@ def is_mpi_master(): return get_mpi_rank()==0
 def get_mpi_rank(): return get_mpi().rank
 def get_mpi_size(): return get_mpi().size
 
-def mpi_map(function,sequence,distribute=False):
+
+def mpi_consistent(value):
+    """Returns the value that the root process provided."""
+    comm = get_mpi().comm
+    if comm==None: return value
+    else: return comm.bcast(value)
+
+def mpi_map(function,sequence,distribute=True):
     """
     A map function parallelized with MPI. If this program was called with mpiexec -n $NUM, 
     then partitions the sequence into $NUM blocks and each MPI process does the rank-th one.
@@ -69,6 +76,8 @@ def mpi_map(function,sequence,distribute=False):
     """
     (rank,size,comm) = get_mpi()
         
+    sequence = mpi_consistent(sequence)
+
     if (size==1):
         return map(function,sequence)
     else:
