@@ -571,6 +571,11 @@ def init_chain_params(params):
     params.add_derived(sig.camb_derived)
     return params
 
+def fid_cmb(lmax):
+    """Returns the WMAP7 LCDM best fit cosmology"""
+    import pypico
+    return pypico.camb(lmax,ns=.963,As=2.43e-9,omegab=.0226/.7**2,omegac=.111/.71**2,omegav=1-.0226/.71**2-.111/.71**2,H0=71,tau=.088,DoLensing=True)
+
 def cmb_orient(wmap=True,spt=True):
     """Plot up WMAP and SPT data points"""
     if (wmap):
