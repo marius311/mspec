@@ -401,6 +401,10 @@ class Chain(dict):
     An MCMC chain. This is just a dictionary mapping parameter names
     to lists of values, along with the special keys 'lnl' and 'weight'
     """
+    def __init__(self,*args,**kwargs):
+        super(Chain,self).__init__(*args,**kwargs)
+        if 'weight' not in self: self['weight']=ones(len(self.values()[0]))
+        
     def params(self): 
         """Returns the parameters in this chain (i.e. the keys except 'lnl' and 'weight'"""
         return set(self.keys())-set(["lnl","weight"])

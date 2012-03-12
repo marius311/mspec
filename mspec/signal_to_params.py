@@ -1,13 +1,13 @@
 #!/usr/bin/env python
 
-from mcmc import *
 from mspec import *
+from mcmc_emcee import mcmc
 import sys
 import pypico
 from scipy.linalg import cho_factor, cho_solve
 import skymodel
 
-@depends("theta","omegabh2","omegach2","omegak","omeganuh2","w","massless_neutrinos","massive_neutrinos")
+#@depends("theta","omegabh2","omegach2","omegak","omeganuh2","w","massless_neutrinos","massive_neutrinos")
 def camb_derived(p):
     h = pypico.theta2hubble(p["theta"],p["omegabh2"],p["omegach2"],p["omegak"],p["omeganuh2"],p["w"],p["massless_neutrinos"],p["massive_neutrinos"])/100.
     return {"H0":100*h,
@@ -18,6 +18,7 @@ def camb_derived(p):
             "As":exp(p["logA"])*10**(-10)}
 
 def lnl(p):
+    p=dict(p,**camb_derived(p))
     model = get_skymodel(p) 
     if 'beam_pca' in p: 
 #        print (1 + sum([p['calib143(%i)'%i] for i in range(p["beam_pca"].shape[1])] * p["beam_pca"],axis=1))
@@ -77,7 +78,11 @@ def get_starting_point(params):
     
 if __name__=="__main__":
     
-    mpi_mcmc(read_Mspec_ini(sys.argv[1:]), lnl=lnl, init_fn=init, derived_fn=camb_derived)
+    if (len(sys.argv) != 2): 
+        print "Usage: python signal_to_params.py parameter_file.ini"
+        sys.exit()
+
+    mcmc(read_Mspec_ini(sys.argv[1]), lnl, init, mpi=True)
 
     
     
