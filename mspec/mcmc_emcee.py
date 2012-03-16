@@ -1,5 +1,6 @@
 import emcee, random, re
 from utils import *
+from itertools import product
 
 class NamedEnsembleSampler(emcee.EnsembleSampler):
     def __init__(self, nwalkers, params, lnprob, extra_params={},**kwargs):

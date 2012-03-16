@@ -450,11 +450,11 @@ def get_bin_func(binstr):
     bindat = None
     
     if (binstr=="ctp"):
-        ctpbins=loadtxt(os.path.join(Mrootdir,"dat/bins/CTP_bin_TT_orig"),dtype=int)
+        ctpbins=loadtxt(os.path.join(Mrootdir,"dat/CTP_bin_TT_orig"),dtype=int)
         bindat=[arange(s,e+1) for [s,e] in ctpbins[:,[1,2]]]
     
     if (binstr=='wmap'): 
-            wmapbins=loadtxt(os.path.join(Mrootdir,"dat/external/wmap_binned_tt_spectrum_7yr_v4p1.txt"),dtype=int)
+            wmapbins=loadtxt(os.path.join(Mrootdir,"dat/wmap_binned_tt_spectrum_7yr_v4p1.txt"),dtype=int)
             bindat=[arange(s,e+1) for [s,e] in wmapbins[:-2,[1,2]]]+[arange(l,l+50) for l in range(1001,2000,50)]+[arange(l,l+200) for l in range(2001,4000,200)]
 
     r = re.match("flat\((?:dl=)?([0-9]+)\)",binstr)
@@ -579,8 +579,8 @@ def fid_cmb(lmax):
 def cmb_orient(wmap=True,spt=True):
     """Plot up WMAP and SPT data points"""
     if (wmap):
-        wmap = loadtxt(os.path.join(Mrootdir,"dat/external/wmap_binned_tt_spectrum_7yr_v4p1.txt"))
+        wmap = loadtxt(os.path.join(Mrootdir,"dat/wmap_binned_tt_spectrum_7yr_v4p1.txt"))
         errorbar(wmap[:,0],wmap[:,3],yerr=wmap[:,4],fmt='.',label='WMAP7')
     if (spt):
-        spt = loadtxt(os.path.join(Mrootdir,"dat/external/dl_spt20082009.txt"))
+        spt = loadtxt(os.path.join(Mrootdir,"dat//dl_spt20082009.txt"))
         errorbar(spt[:,0],spt[:,1],yerr=spt[:,2],fmt='.',label='SPT K11')
