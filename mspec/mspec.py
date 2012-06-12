@@ -9,7 +9,6 @@ from scipy.optimize import fmin
 from utils import *
 import healpy as H
 import sys, os, re, gc
-import mcmc
 
 
 MapID = namedtuple("MapID", ["fr","type","id"])
@@ -565,7 +564,6 @@ def init_chain_params(params):
     in the same way they are during an MCMC chain, so that you can call
     the functions from M.sig on them.
     """
-    import signal_to_params as sig
     params = read_Mspec_ini(params)
     sig.init(params)
     params=mcmc.get_mcmc_params(params)
