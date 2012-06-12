@@ -7,7 +7,6 @@ from numpy import *
 from numpy.linalg import norm
 from scipy.optimize import fmin
 from utils import *
-import healpy as H
 import sys, os, re, gc
 
 
@@ -408,6 +407,7 @@ def alm2cl(alm1,alm2):
     Compute the cross power-spectrum given two alms computed with map2alm
     Assumes these are alm's from a real map so that a_lm = -conjugate(a_l(-m))
     """
+    import healpy as H
     (lmax1,lmax2) = [H.Alm.getlmax(alen(a)) for a in [alm1,alm2]]
     lmax = min(lmax1,lmax2)
     return array(real([(alm1[l]*alm2[l]+2*real(vdot(alm1[H.Alm.getidx(lmax1,l,arange(1,l+1))],alm2[H.Alm.getidx(lmax2,l,arange(1,l+1))])))/(2*l+1) for l in range(lmax)]))
@@ -424,6 +424,7 @@ def skycut_mask(nside,percent,dth=deg2rad(10),apod_fn=lambda x: cos(pi*(x-1)/4)*
     dth -- The number of radians of apodization (default = 10 degrees)
     apod_fn -- The apodization function (default = Hann window)
     """
+    import healpy as H
     mask = ones(12*nside**2)
     thcut = arcsin(percent)
     for iz in range(4*nside+1):
