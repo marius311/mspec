@@ -1,8 +1,6 @@
 from ast import literal_eval
 from bisect import bisect_right, bisect_left
 from collections import namedtuple, defaultdict
-from matplotlib.pyplot import plot, errorbar, contour, yscale as ppyscale, xscale as ppxscale
-from matplotlib.mlab import movavg
 from numpy import *
 from numpy.linalg import norm
 from scipy.optimize import fmin
@@ -253,6 +251,8 @@ class PowerSpectra():
         Other arguments:
         **kwargs -- These are passed through to the plot function.
         """
+        from matplotlib.pyplot import plot, errorbar, contour, yscale as ppyscale, xscale as ppxscale
+        from matplotlib.mlab import movavg
         if ax==None: ax=figure().add_subplot(111)
         if (which==None): which = pairs(self.get_maps())
         if errorbars and self.cov:
@@ -578,6 +578,8 @@ def fid_cmb(lmax):
 
 def cmb_orient(wmap=True,spt=True):
     """Plot up WMAP and SPT data points"""
+    from matplotlib.pyplot import plot, errorbar, contour, yscale as ppyscale, xscale as ppxscale
+    from matplotlib.mlab import movavg
     if (wmap):
         wmap = loadtxt(os.path.join(Mrootdir,"dat/wmap_binned_tt_spectrum_7yr_v4p1.txt"))
         errorbar(wmap[:,0],wmap[:,3],yerr=wmap[:,4],fmt='.',label='WMAP7')
