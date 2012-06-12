@@ -242,7 +242,7 @@ class PowerSpectra():
         
         return PowerSpectra(spectra,cov,self.ells,binning=self.binning)
     
-    def plot(self,which=None,errorbars=True,prefix="",**kwargs):
+    def plot(self,which=None,errorbars=True,prefix="",ax=None,**kwargs):
         """
         Plot these powerspectra.
         
@@ -255,14 +255,15 @@ class PowerSpectra():
         Other arguments:
         **kwargs -- These are passed through to the plot function.
         """
+        if ax==None: ax=figure().add_subplot(111)
         if (which==None): which = pairs(self.get_maps())
         if errorbars and self.cov:
             for (a,b) in which:
-                errorbar(self.ells,self.spectra[(a,b)],yerr=sqrt(diagonal(self.cov[((a,b),(a,b))])),
+                ax.errorbar(self.ells,self.spectra[(a,b)],yerr=sqrt(diagonal(self.cov[((a,b),(a,b))])),
                          label=prefix+str(a)+" x "+str(b),fmt=kwargs.pop("fmt","."),**kwargs)
         else:
             for (a,b) in which:
-                plot(self.ells,self.spectra[(a,b)],label=prefix+str(a)+" x "+str(b),**kwargs)
+                ax.plot(self.ells,self.spectra[(a,b)],label=prefix+str(a)+" x "+str(b),**kwargs)
 
 
     def apply_func(self,fspec=lambda _,x: x, fcov=lambda _, x: x):
@@ -454,8 +455,8 @@ def get_bin_func(binstr):
         bindat=[arange(s,e+1) for [s,e] in ctpbins[:,[1,2]]]
     
     if (binstr=='wmap'): 
-            wmapbins=loadtxt(os.path.join(Mrootdir,"dat/wmap_binned_tt_spectrum_7yr_v4p1.txt"),dtype=int)
-            bindat=[arange(s,e+1) for [s,e] in wmapbins[:-2,[1,2]]]+[arange(l,l+50) for l in range(1001,2000,50)]+[arange(l,l+200) for l in range(2001,4000,200)]
+        wmapbins=loadtxt(os.path.join(Mrootdir,"dat/wmap_binned_tt_spectrum_7yr_v4p1.txt"),dtype=int)
+        bindat=[arange(s,e+1) for [s,e] in wmapbins[:-2,[1,2]]]+[arange(l,l+50) for l in range(1001,2000,50)]+[arange(l,l+200) for l in range(2001,4000,200)]
 
     r = re.match("flat\((?:dl=)?([0-9]+)\)",binstr)
     if (r!=None):
@@ -501,7 +502,7 @@ def load_signal(params, clean=False, calib=False, calibrange=slice(150,500), loa
     ells, spectra = load_multi(params["signal"]+"_spec").T
     ells = array(sorted(set(ells)))
     cov = None
-    if loadcov and str2bool(params.get("get_covariance",False)):
+    if loadcov and str2bool(params.get("get_covariance",True)):
         try: cov = load_multi(params["signal"]+"_cov")
         except IOError: pass
     signal = PowerSpectra(spectra, cov, ells, params.get("freqs"),binning=params["binning"])

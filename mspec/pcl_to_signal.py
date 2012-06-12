@@ -23,7 +23,7 @@ if __name__=="__main__":
     pcls = load_pcls(params)
     beam = load_beams(params) if params.get("beams",None) else defaultdict(lambda: 1)
     noise = load_noise(params) if params.get("noise",None) else defaultdict(lambda: 0)
-
+    
     freqs = params.get("freqs")
     maps = set(m for m in pcls.get_maps() if (m.fr in freqs if freqs!=None else True))
     if params.get("beams",None): maps&=set(beam.get_maps())
