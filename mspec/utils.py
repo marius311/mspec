@@ -1,7 +1,6 @@
 import re, os
 from itertools import combinations_with_replacement, product
 from numpy import *
-from matplotlib.pyplot import errorbar, legend, Line2D
 import itertools
 import traceback
 from collections import namedtuple
@@ -170,6 +169,7 @@ def read_ini(file):
 
 def cust_legend(opts,labels,**kwargs):
     """A custom legend"""
+    from matplotlib.pyplot import legend, Line2D
     legend([Line2D([0],[0],**o) for o in opts],labels,**kwargs)
 
 def corrify(m):
