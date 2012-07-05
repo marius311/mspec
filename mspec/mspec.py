@@ -543,7 +543,7 @@ def load_beams(params):
     files = [(os.path.join(params["beams"],f),[MapID(m.group(1),'T',m.group(2)) for m in regex.finditer(f)]) for f in os.listdir(params["beams"])]
     beams = SymmetricTensorDict(rank=2)
     
-    beam_pow = {'bl':2,'wl':1}[params.get("beam_format","bl")] 
+    beampow = {'bl':2,'wl':1}[params.get("beam_format","bl")] 
     
     for (f,m) in files:
         if len(m)==1: beams[(m[0],m[0])] = load_multi(f)[:int(params["lmax"]),params.get("beam_col",1)]**beampow
