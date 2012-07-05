@@ -251,7 +251,7 @@ class PowerSpectra():
         Other arguments:
         **kwargs -- These are passed through to the plot function.
         """
-        from matplotlib.pyplot import plot, errorbar, contour, yscale as ppyscale, xscale as ppxscale
+        from matplotlib.pyplot import figure, plot, errorbar, contour, yscale as ppyscale, xscale as ppxscale
         from matplotlib.mlab import movavg
         if ax==None: ax=figure().add_subplot(111)
         if (which==None): which = pairs(self.get_maps())
@@ -542,9 +542,12 @@ def load_beams(params):
     regex=re.compile(params.get("map_regex",def_map_regex))
     files = [(os.path.join(params["beams"],f),[MapID(m.group(1),'T',m.group(2)) for m in regex.finditer(f)]) for f in os.listdir(params["beams"])]
     beams = SymmetricTensorDict(rank=2)
+    
+    beam_pow = {'bl':2,'wl':1}[params.get("beam_format","bl")] 
+    
     for (f,m) in files:
-        if len(m)==1: beams[(m[0],m[0])] = load_multi(f)[:int(params["lmax"]),params.get("beam_col",1)]**2
-        elif len(m)==2: beams[(m[0],m[1])] = load_multi(f)[:int(params["lmax"]),params.get("beam_col",1)]**2
+        if len(m)==1: beams[(m[0],m[0])] = load_multi(f)[:int(params["lmax"]),params.get("beam_col",1)]**beampow
+        elif len(m)==2: beams[(m[0],m[1])] = load_multi(f)[:int(params["lmax"]),params.get("beam_col",1)]**beampow
         
     for (m1,m2) in pairs(beams.get_index_values()):
         if (m1,m2) not in beams: 
