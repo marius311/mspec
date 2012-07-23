@@ -34,7 +34,7 @@ if __name__=="__main__":
 
     if str2bool(params.get("use_auto_spectra",'F')): weight = lambda a,b: 1
     else: weight = lambda a,b: 0 if a==b else 1
-
+    
     # Load mode coupling matrices
     if (params.get("mask")):
         if (is_mpi_master()): print "Loading mode coupling matrices..."
@@ -61,7 +61,6 @@ if __name__=="__main__":
         for (a,b) in pairs(maps): hat_cls_det[(a,b)] *= calib[a]*calib[b]
     else: calib = defaultdict(lambda: 1)
 
-    
     # Equation (6), the per frequency signal estimate
     if (is_mpi_master()): print "Calculating signal..."
     hat_cls_freq = PowerSpectra(ells=bin(ells),binning=params["binning"])

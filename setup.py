@@ -1,1 +1,10 @@
-print "Like I know how to make a setup.py... Just add this directory to your PYTHONPATH"
+from distutils.core import setup
+        
+setup(
+  name='mspec',
+  version='1.0.0',
+  author='Marius Millea',
+  author_email='mmillea@ucdavis.edu',
+  packages=['mspec'],
+  description='Compute (M)ultifrequency (Spec)tra',
+)

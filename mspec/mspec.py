@@ -64,7 +64,7 @@ class SymmetricTensorDict(dict):
         else: return set(i for pp in self.keys() for p in pp for i in p)
 
 
-class PowerSpectra():
+class PowerSpectra(object):
     """
     Holds information about a set of powerspectra and possibly their covariance.
     
@@ -348,6 +348,19 @@ class PowerSpectra():
 
     def __sub__(self,other):
         return PowerSpectra.sum([self,other.rescaled(-1)])
+      
+    def __mul__(self, other):
+        return PowerSpectra.binary_op(self, other, (lambda x,y: x*y))
+
+    def __div__(self, other):
+        return PowerSpectra.binary_op(self, other, (lambda x,y: x/y))
+      
+    @staticmethod
+    def binary_op(a, b, func):
+        assert all(a.ells == b.ells), "Spectra need to have the same ells."
+        maps = set(a.get_maps()) & set(b.get_maps())
+        spectra = SymmetricTensorDict([(k,func(a[k],b[k])) for k in pairs(maps)],rank=2)
+        return PowerSpectra(spectra=spectra, ells=a.ells, binning=a.binning)
         
     @staticmethod
     def sum(ps):
@@ -554,6 +567,25 @@ def load_beams(params):
             beams[(m1,m2)] = sqrt(beams[(m1,m1)]*beams[(m2,m2)])
     
     return PowerSpectra(beams)
+        
+        
+def load_subpix(params, col=5):
+    """Load the subpixel contribution from the beam files"""
+    params = read_Mspec_ini(params)
+    regex = re.compile(params.get("map_regex",def_map_regex))
+    files = [(os.path.join(params["beams"],f),[MapID(m.group(1),'T',m.group(2)) for m in regex.finditer(f)]) for f in os.listdir(params["beams"])]
+    beams = SymmetricTensorDict(rank=2)
+    
+    for (f,m) in files:
+        if len(m)==1: beams[(m[0],m[0])] = load_multi(f)[:int(params["lmax"]),params.get("subpix_col",col)]
+        elif len(m)==2: beams[(m[0],m[1])] = load_multi(f)[:int(params["lmax"]),params.get("subpix_col",col)]
+        
+    for (m1,m2) in pairs(beams.get_index_values()):
+        if (m1,m2) not in beams: 
+            beams[(m1,m2)] = sqrt(beams[(m1,m1)]*beams[(m2,m2)])
+    
+    return PowerSpectra(beams)
+
         
 def load_noise(params):
     """Load the noise"""
