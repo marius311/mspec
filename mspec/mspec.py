@@ -452,7 +452,7 @@ def get_bin_func(binstr):
     
     if (binstr=="ctp"):
         ctpbins=loadtxt(os.path.join(Mrootdir,"dat/CTP_bin_TT_orig"),dtype=int)
-        bindat=[arange(s,e+1) for [s,e] in ctpbins[:,[1,2]]]
+        bindat=[arange(s,e+1) for [s,e] in ctpbins[:,[1,2]]]+[arange(l,l+200) for l in range(3001,6000,200)]
     
     if (binstr=='wmap'): 
         wmapbins=loadtxt(os.path.join(Mrootdir,"dat/wmap_binned_tt_spectrum_7yr_v4p1.txt"),dtype=int)
