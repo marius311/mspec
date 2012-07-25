@@ -522,10 +522,10 @@ def get_optimal_weights(pcl, freqs=None, bootstrap_weights=None, noise_range=(15
     for (alpha,beta) in pairs(freqs):
         pcl_sig[(alpha,beta)] = sum(
                 pcl[(a,b)]*bootstrap_weights[a,b]
-                for (a,b) in pairs(maps) if a.fr==alpha and b.fr==beta and a!=b
+                for (a,b) in pairs(maps) if (a.fr,b.fr) in [(alpha,beta),(beta,alpha)] and a!=b
             )/sum(
                 bootstrap_weights[a,b]
-                for (a,b) in pairs(maps) if a.fr==alpha and b.fr==beta and a!=b
+                for (a,b) in pairs(maps) if (a.fr,b.fr) in [(alpha,beta),(beta,alpha)] and a!=b
             )
     
     pcl_nl = {m:mean((pcl[m,m] - pcl_sig[m.fr,m.fr])[slice(*noise_range)]) for m in maps if m.fr in freqs}
