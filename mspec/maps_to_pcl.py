@@ -30,10 +30,10 @@ if __name__=="__main__":
     def maps2alm((file,det)):
         print "Process "+str(get_mpi_rank())+" is transforming '"+file+"'"
         mp = H.read_map(file)
-        if mask!=None: mp*=mask
         if (len(mp[mp<-1e20])!=0):
             print "Warning: Setting "+str(len(mp[mp<-1e20]))+" remaining UNSEEN pixels after masking to 0 in "+file
             mp[mp<-1e20]=0
+        if mask!=None: mp*=mask
         det.insert(1,"T")
         return (file,det,H.map2alm(mp,lmax=lmax))
         

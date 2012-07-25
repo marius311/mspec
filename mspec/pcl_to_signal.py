@@ -8,6 +8,7 @@ from collections import namedtuple, defaultdict
 from utils import *
 import utils
 from bisect import bisect_right
+import healpy as H
 
 
 
