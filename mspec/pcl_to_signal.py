@@ -23,6 +23,7 @@ if __name__=="__main__":
     pcls = load_pcls(params)
     beam = load_beams(params) if params.get("beams",None) else defaultdict(lambda: 1)
     noise = load_noise(params) if params.get("noise",None) else defaultdict(lambda: 0)
+    subpix = load_subpix(params) if params.get("subpix",None) else defaultdict(lambda: 0)
     
     freqs = params.get("freqs")
     maps = set(m for m in pcls.get_maps() if (m.fr in freqs if freqs!=None else True))
@@ -32,8 +33,12 @@ if __name__=="__main__":
     
     if (is_mpi_master()): print "Found pseudo-cl's, beams, and noise for: "+str(sorted(maps))
 
-    if str2bool(params.get("use_auto_spectra",'F')): weight = lambda a,b: 1
-    else: weight = lambda a,b: 0 if a==b else 1
+    if str2bool(params.get("use_auto_spectra",'F')): weight = defaultdict(lambda: 1)
+    else: 
+        if str2bool(params.get("optimal_weights",'T')): 
+            weight = get_optimal_weights(pcls)
+            import pdb; pdb.set_trace();
+        else: weight = {(a,b): 0 if a==b else 1 for (a,b) in pairs(pcl.get_maps())}
     
     # Load mode coupling matrices
     if (params.get("mask")):
@@ -47,12 +52,13 @@ if __name__=="__main__":
         gll2=diag(1./(2*arange(lmax)+1))
 
     if params.get('deconv_pixwin',True): 
+        import healpy as H
         for (a,b) in pairs(maps): pcls[(a,b)]/=H.pixwin(2048)[:lmax]**2
 
     #Equation (4), the per detector signal estimate
     if (is_mpi_master()): print "Calculating per-detector signal..."
     hat_cls_det = PowerSpectra(ells=bin(ells))
-    for (a,b) in pairs(maps): hat_cls_det[(a,b)] = bin((dot(imll,pcls[(a,b)]) - (noise[a] if a==b else 0))/(beam[(a,b)]))
+    for (a,b) in pairs(maps): hat_cls_det[(a,b)] = bin((dot(imll,pcls[(a,b)]) - (noise[a] if a==b else 0) - subpix[a,b])/(beam[(a,b)]))
 
     # Do per detector calibration
     if (str2bool(params.get('do_calibration',True))):
@@ -66,10 +72,10 @@ if __name__=="__main__":
     hat_cls_freq = PowerSpectra(ells=bin(ells),binning=params["binning"])
     for (alpha,beta) in pairs(freqs):
         hat_cls_freq[(alpha,beta)] = sum(
-                hat_cls_det[(a,b)]*weight(a,b) 
+                hat_cls_det[(a,b)]*weight[(a,b)]
                 for (a,b) in pairs(maps) if a.fr==alpha and b.fr==beta
             )/sum(
-                weight(a,b) 
+                weight[(a,b)] 
                 for (a,b) in pairs(maps) if a.fr==alpha and b.fr==beta
             )
     
@@ -85,7 +91,7 @@ if __name__=="__main__":
     if str2bool(params.get("get_covariance",True)):
         if (is_mpi_master()): print "Calculating detector covariance..."
         def entry(((a,b),(c,d))):
-            if weight(a,b)*weight(c,d)!=0:
+            if weight[(a,b)]*weight[(c,d)]!=0:
                 print "Calculating the "+str(((str(a),str(b)),(str(c),str(d))))+" entry."
                 # Equation (5)
                 pclcov = (lambda x: x+x.T)(outer(fid_cls[(a,c)],fid_cls[(b,d)]) + outer(fid_cls[(a,d)],fid_cls[(b,c)]))*gll2/2
@@ -107,8 +113,8 @@ if __name__=="__main__":
                        if a.fr==alpha and b.fr==beta and c.fr==gamma and d.fr==delta]
                 
                 hat_cls_freq.cov[((alpha,beta),(gamma,delta))] = \
-                    sum(weight(a,b)*weight(c,d)*hat_cls_det.cov[((a,b),(c,d))] for ((a,b),(c,d)) in abcds) \
-                    / sum(weight(a,b)*weight(c,d) for ((a,b),(c,d)) in abcds)
+                    sum(weight[(a,b)]*weight[(c,d)]*hat_cls_det.cov[((a,b),(c,d))] for ((a,b),(c,d)) in abcds) \
+                    / sum(weight[(a,b)]*weight[(c,d)] for ((a,b),(c,d)) in abcds)
             
     if (is_mpi_master()): hat_cls_freq.save_as_matrix(params["signal"])
 

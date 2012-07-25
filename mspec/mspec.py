@@ -7,6 +7,23 @@ from scipy.optimize import fmin
 from utils import *
 import sys, os, re, gc
 
+__all__ = ['MapID', 
+           'SymmetricTensorDict',
+           'PowerSpectra', 
+           'alm2cl', 
+           'skycut_mask',
+           'get_bin_func', 
+           'load_signal', 
+           'load_pcls', 
+           'load_clean_calib_signal', 
+           'load_beams', 
+           'read_Mspec_ini',
+           'cmb_orient',
+           'load_chain',
+           'init_chain_params',
+           'fid_cmb',
+           'load_subpix',
+           'get_optimal_weights']
 
 MapID = namedtuple("MapID", ["fr","type","id"])
 MapID.__str__ = MapID.__repr__ = lambda self: "-".join(self)  
@@ -486,6 +503,42 @@ def get_bin_func(binstr):
 
     if bindat!=None: return bin
     else: raise ValueError("Unknown binning function '"+binstr+"'")
+
+def get_optimal_weights(pcl, freqs=None, bootstrap_weights=None, noise_range=(1500,2500)):
+    """
+    Gets the inverse variance weighting of cross spectra given noise 
+    levels computed from the given pseudo-Cl's
+    
+    To compute noise levels we look at auto minus average-of-cross-spectra.
+    The `bootstrap_weights` come in when computing this average. The default
+    is equal weights, but one can imagine iterating this function a few times
+    (althought its probably totally unnecessary).
+    """
+    maps = pcl.get_maps()
+    freqs = freqs or set(m.fr for m in maps)
+    if bootstrap_weights is None: bootstrap_weights=defaultdict(lambda: 1)
+
+    pcl_sig = PowerSpectra(ells=pcl.ells,binning=pcl.binning)
+    for (alpha,beta) in pairs(freqs):
+        pcl_sig[(alpha,beta)] = sum(
+                pcl[(a,b)]*bootstrap_weights[a,b]
+                for (a,b) in pairs(maps) if a.fr==alpha and b.fr==beta and a!=b
+            )/sum(
+                bootstrap_weights[a,b]
+                for (a,b) in pairs(maps) if a.fr==alpha and b.fr==beta and a!=b
+            )
+    
+    pcl_nl = {m:mean((pcl[m,m] - pcl_sig[m.fr,m.fr])[slice(*noise_range)]) for m in maps if m.fr in freqs}
+    
+    all_weights = {}
+    for (alpha,beta) in pairs(freqs):
+        weights = {(a,b):0 if a==b else 1/pcl_nl[a]/pcl_nl[b] for a,b in pcl.get_spectra() if a.fr==alpha and b.fr==beta}
+        weights_normed = {k:v/sum(weights.values()) for k,v in weights.items()}
+        all_weights.update(weights_normed)
+        
+    return all_weights
+
+
 
 def clean_signal(sig,clean,weight=1,range=slice(0,-1)):
     """
