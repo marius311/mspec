@@ -18,6 +18,7 @@ if __name__=="__main__":
     lmax = params["lmax"]
     bin = params["binning"]
     ells = arange(lmax)
+    todl = ells*(ells+1)/2/pi
     
     # Load stuff
     if (is_mpi_master()): print "Loading pseudo-cl's, beams, and noise..."
@@ -59,7 +60,7 @@ if __name__=="__main__":
     #Equation (4), the per detector signal estimate
     if (is_mpi_master()): print "Calculating per-detector signal..."
     hat_cls_det = PowerSpectra(ells=bin(ells))
-    for (a,b) in pairs(maps): hat_cls_det[(a,b)] = bin((dot(imll,pcls[(a,b)]) - (noise[a] if a==b else 0) - subpix[a,b])/(beam[(a,b)]))
+    for (a,b) in pairs(maps): hat_cls_det[(a,b)] = bin(todl*(dot(imll,pcls[(a,b)]) - (noise[a] if a==b else 0) - subpix[a,b])/(beam[(a,b)]))
 
     # Do per detector calibration
     if (str2bool(params.get('do_calibration',True))):
@@ -84,7 +85,7 @@ if __name__=="__main__":
     if str2bool(params.get("get_covariance",False)):
         if (is_mpi_master()): print "Calculating fiducial signal..."
         fid_cls = PowerSpectra(ells=ells)
-        for (a,b) in pairs(maps): 
+        for (a,b) in pairs(maps):
             fid_cls[(a,b)] = smooth(dot(imll,pcls[(a,b)])*(ells+2)**2,window_len=50)/(ells+2)**2*calib[a]*calib[b]
             fid_cls[(a,b)][:20] = 1000/arange(1,21)**2*2*pi
 
@@ -97,7 +98,7 @@ if __name__=="__main__":
                 # Equation (5)
                 pclcov = (lambda x: x+x.T)(outer(fid_cls[(a,c)],fid_cls[(b,d)]) + outer(fid_cls[(a,d)],fid_cls[(b,c)]))*gll2/2
                 # Equation (7)
-                return (((a,b),(c,d)),dot(bin(imll/transpose([beam[(a,b)]]),axis=0),dot(pclcov,bin(imll.T/(beam[(c,d)]),axis=1))) *calib[a]*calib[b]*calib[c]*calib[d])
+                return (((a,b),(c,d)),dot(bin(todl*(imll/transpose([beam[(a,b)]])),axis=0),dot(pclcov,bin(todl*(imll.T/(beam[(c,d)]),axis=1)))) *calib[a]*calib[b]*calib[c]*calib[d])
             else:
                 return (((a,b),(c,d)),0)
 
