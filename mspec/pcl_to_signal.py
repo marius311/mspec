@@ -37,9 +37,7 @@ if __name__=="__main__":
 
     if str2bool(params.get("use_auto_spectra",'F')): weight = defaultdict(lambda: 1)
     else: 
-        if str2bool(params.get("optimal_weights",'T')): 
-            weight = get_optimal_weights(pcls)
-            import pdb; pdb.set_trace();
+        if str2bool(params.get("optimal_weights",'T')): weight = get_optimal_weights(pcls)
         else: weight = {(a,b): 0 if a==b else 1 for (a,b) in pairs(pcl.get_maps())}
     
     # Load mode coupling matrices
@@ -75,10 +73,10 @@ if __name__=="__main__":
     for (alpha,beta) in pairs(freqs):
         hat_cls_freq[(alpha,beta)] = sum(
                 hat_cls_det[(a,b)]*weight[(a,b)]
-                for (a,b) in pairs(maps) if a.fr==alpha and b.fr==beta
+                for (a,b) in pairs(maps) if (a.fr, b.fr) in [(alpha,beta),(beta,alpha)]
             )/sum(
                 weight[(a,b)] 
-                for (a,b) in pairs(maps) if a.fr==alpha and b.fr==beta
+                for (a,b) in pairs(maps) if (a.fr, b.fr) in [(alpha,beta),(beta,alpha)]
             )
     
     # The fiducial model for the mask deconvolved Cl's which gets used in the covariance

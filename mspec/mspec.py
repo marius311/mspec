@@ -513,6 +513,9 @@ def get_optimal_weights(pcl, freqs=None, bootstrap_weights=None, noise_range=(15
     The `bootstrap_weights` come in when computing this average. The default
     is equal weights, but one can imagine iterating this function a few times
     (althought its probably totally unnecessary).
+
+    The returned dictionary is symmetric for convenience only. One should
+    not sum over all power spectra.
     """
     maps = pcl.get_maps()
     freqs = freqs or set(m.fr for m in maps)
@@ -532,11 +535,11 @@ def get_optimal_weights(pcl, freqs=None, bootstrap_weights=None, noise_range=(15
     
     all_weights = {}
     for (alpha,beta) in pairs(freqs):
-        weights = {(a,b):0 if a==b else 1/pcl_nl[a]/pcl_nl[b] for a,b in pcl.get_spectra() if a.fr==alpha and b.fr==beta}
+        weights = {(a,b):0 if a==b else 1/pcl_nl[a]/pcl_nl[b] for a,b in pcl.get_spectra() if (a.fr,b.fr) in [(alpha,beta),(beta,alpha)]}
         weights_normed = {k:v/sum(weights.values()) for k,v in weights.items()}
         all_weights.update(weights_normed)
         
-    return all_weights
+    return SymmetricTensorDict(all_weights,rank=2)
 
 
 
