@@ -255,7 +255,7 @@ class PowerSpectra(object):
         
         return PowerSpectra(spectra,cov,self.ells,binning=self.binning)
     
-    def plot(self,which=None,errorbars=True,prefix="",ax=None,**kwargs):
+    def plot(self, which=None, errorbars=True, prefix="", ax=None, fig=None, **kwargs):
         """
         Plot these powerspectra.
         
@@ -268,9 +268,11 @@ class PowerSpectra(object):
         Other arguments:
         **kwargs -- These are passed through to the plot function.
         """
-        from matplotlib.pyplot import figure, plot, errorbar, contour, yscale as ppyscale, xscale as ppxscale
+        from matplotlib.pyplot import figure
         from matplotlib.mlab import movavg
-        if ax==None: ax=figure().add_subplot(111)
+        
+        if ax is None: ax = (figure(0) if fig is None else fig).add_subplot(111)
+        
         if (which==None): which = pairs(self.get_maps())
         if errorbars and self.cov:
             for (a,b) in which:
