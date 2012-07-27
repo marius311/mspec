@@ -271,7 +271,7 @@ class PowerSpectra(object):
         from matplotlib.pyplot import figure
         from matplotlib.mlab import movavg
         
-        if ax is None: ax = (figure(0) if fig is None else fig).add_subplot(111)
+        if ax is None: ax = (figure(0) if fig is None else (figure(fig) if isinstance(fig,int) else fig)).add_subplot(111)
         
         if (which==None): which = pairs(self.get_maps())
         if errorbars and self.cov:
