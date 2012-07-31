@@ -23,7 +23,8 @@ __all__ = ['MapID',
            'init_chain_params',
            'fid_cmb',
            'load_subpix',
-           'get_optimal_weights']
+           'get_optimal_weights',
+           'def_map_regex']
 
 MapID = namedtuple("MapID", ["fr","type","id"])
 MapID.__str__ = MapID.__repr__ = lambda self: "-".join(self)  
