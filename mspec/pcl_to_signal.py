@@ -96,7 +96,7 @@ if __name__=="__main__":
                 # Equation (5)
                 pclcov = (lambda x: x+x.T)(outer(fid_cls[(a,c)],fid_cls[(b,d)]) + outer(fid_cls[(a,d)],fid_cls[(b,c)]))*gll2/2
                 # Equation (7)
-                return (((a,b),(c,d)),dot(bin(todl*(imll/transpose([beam[(a,b)]])),axis=0),dot(pclcov,bin(todl*(imll.T/(beam[(c,d)]),axis=1)))) *calib[a]*calib[b]*calib[c]*calib[d])
+                return (((a,b),(c,d)),dot(bin(todl*(imll/transpose([beam[(a,b)]])),axis=0),dot(pclcov,bin(todl*(imll.T/(beam[(c,d)])),axis=1)))*calib[a]*calib[b]*calib[c]*calib[d])
             else:
                 return (((a,b),(c,d)),0)
 
