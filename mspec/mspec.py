@@ -168,28 +168,27 @@ class PowerSpectra(object):
         """Gets keys for all cross spectra"""
         return set(self.get_spectra()) - set(self.get_auto_spectra())
 
-    def get_as_matrix(self,ell_blocks=False):
+    def get_as_matrix(self, lrange=None, ell_blocks=False):
         """
         Gets the spectra as a single block vector and the covariances as
         a single block matrix. The return value has fields 'spec' and 'cov. 
         
         Keyword arguments:
+        lrange -- Dictionary mapping power spectra to ranges of ell 
+                      which to include in the matrix. 
         ell_blocks -- If True each block corresponds to the same ell, otherwise each 
                       block corresponds to the same spectrum. (default=False)
         """
         cov_mat=None
+        if lrange is None: lrange = {}
+        for k in self.get_spectra(): lrange.setdefault(k,[None])
+        slices = {k:self.binning(slice(*lrange[k])) for k in self.get_spectra()}            
         if ell_blocks:
-            spec_mat = vstack([[[ell,self.spectra[k][iell]] for k in pairs(self.get_maps())] for (iell,ell) in enumerate(self.ells)])
-            if (self.cov): 
-                nl, nps = alen(self.ells), alen(pairs(self.get_maps()))
-                cov_mat = zeros((nl*nps,nl*nps))
-                for (i,p1) in enumerate(pairs(self.get_maps())):
-                    for (j,p2) in enumerate(pairs(self.get_maps())):
-                        cov_mat[i::nps,j::nps] = self.cov[(p1,p2)]
+            raise NotImplementedError("Functionality temporarily removed.")
         else:
-            spec_mat = vstack(vstack([self.ells,self.spectra[(alpha,beta)]]).T for (alpha,beta) in pairs(self.get_maps()))
-            if (self.cov): cov_mat = vstack(dstack(array([[self.cov[(p1,p2)] for p1 in pairs(self.get_maps())] for p2 in pairs(self.get_maps())])))
-            
+            spec_mat = vstack(vstack([self.ells,self.spectra[(alpha,beta)]])[:,slices[(alpha,beta)]].T for (alpha,beta) in pairs(self.get_maps()))
+            if (self.cov): 
+                cov_mat = vstack(map(hstack,[[self.cov[(p1,p2)][slices[p1],slices[p2]] for p2 in self.get_spectra()] for p1 in self.get_spectra()]))
         return namedtuple("SpecCov", ['spec','cov'])(spec_mat,cov_mat)
 
     def save_as_matrix(self,fileroot):
@@ -498,13 +497,16 @@ def get_bin_func(binstr):
     
     def bin(x,axis=None):
         if type(x)==slice:
-            return slice(bisect_left([s[0] for s in bindat],x.start),bisect_left([s[-1] for s in bindat],x.stop))
+            return slice(None if x.start is None else bisect_left([s[0] for s in bindat],x.start),
+                         None if x.stop is None else bisect_left([s[-1] for s in bindat],x.stop))
         else:
             bins = bindat[:bisect_left([s[-1] for s in bindat],len(x))]
             for a in ([axis] if axis!=None else range(x.ndim)): x = array([x.take(s,axis=a).mean(axis=a) for s in bins]).swapaxes(a,0)
             return x
-
-    if bindat!=None: return bin
+        
+    if bindat!=None: 
+        bin._bindat = bindat
+        return bin
     else: raise ValueError("Unknown binning function '"+binstr+"'")
 
 def get_optimal_weights(pcl, freqs=None, bootstrap_weights=None, noise_range=(1500,2500)):
