@@ -24,7 +24,8 @@ __all__ = ['MapID',
            'fid_cmb',
            'load_subpix',
            'get_optimal_weights',
-           'def_map_regex']
+           'def_map_regex',
+           'inpaint']
 
 MapID = namedtuple("MapID", ["fr","type","id"])
 MapID.__str__ = MapID.__repr__ = lambda self: "-".join(self)  
@@ -647,6 +648,19 @@ def load_subpix(params, col=5):
     
     return PowerSpectra(beams)
 
+def inpaint(m,num_degrades=1,nside_in=2048):
+    """
+    Inpaints missing pixels by degrading the map (while ignoring missing pixels),
+    then setting the missing values correpsonding to their value in the degraded map. 
+    """
+    nside_deg = nside_in/(2**num_degrades)
+    badpix = arange(12*nside_in**2)[m==H.UNSEEN]
+    badpix_deg = H.nest2ring(nside_deg,H.ring2nest(nside_in,badpix) >> 2*num_degrades)
+    m_deg = H.ud_grade(m,nside_deg)
+    m2=m.copy()
+    m2[badpix]=m_deg[badpix_deg]
+    return m2
+      
         
 def load_noise(params):
     """Load the noise"""

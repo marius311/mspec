@@ -29,10 +29,16 @@ if __name__=="__main__":
     # Get the alm's of each map
     def maps2alm((file,det)):
         print "Process "+str(get_mpi_rank())+" is transforming '"+file+"'"
-        mp = H.read_map(file)
-        if (len(mp[mp<-1e20])!=0):
-            print "Warning: Setting "+str(len(mp[mp<-1e20]))+" remaining UNSEEN pixels after masking to 0 in "+file
-            mp[mp<-1e20]=0
+        mp = H.read_map(file,nest=False)
+        
+        # Shouldn't need this as ordering is autodetermined by read_map, but sometimes its mislabeled
+        if params.get('nest2ring'): mp=H.reorder(mp,n2r=True)
+        elif params.get('ring2nest'): mp=H.reorder(mp,r2n=True)
+        
+        num_unseen = mp[mask*mp<-1e20].shape[0]
+        if (num_unseen>0):
+            print "Warning: Inpainting "+str(num_unseen)+" remaining UNSEEN pixels after masking "+file
+            m = inpaint(m)
         if mask!=None: mp*=mask
         det.insert(1,"T")
         return (file,det,H.map2alm(mp,lmax=lmax))
