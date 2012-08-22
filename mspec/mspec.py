@@ -671,6 +671,7 @@ def inpaint(m,num_degrades=1,nside_in=2048):
     Inpaints missing pixels by degrading the map (while ignoring missing pixels),
     then setting the missing values correpsonding to their value in the degraded map. 
     """
+    import healpy as H
     nside_deg = nside_in/(2**num_degrades)
     badpix = arange(12*nside_in**2)[m==H.UNSEEN]
     badpix_deg = H.nest2ring(nside_deg,H.ring2nest(nside_in,badpix) >> 2*num_degrades)
