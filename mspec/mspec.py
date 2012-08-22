@@ -481,6 +481,24 @@ def get_bin_func(binstr):
     
     if (binstr=="none"): return lambda x: x
     
+    if binstr=='c2':
+        q = loadtxt(os.path.join(Mrootdir,"dat/c2_binning"))
+        nq = q.shape[1]
+        def c2_bin(x,axis=None):
+            if type(x)==slice:
+                pass
+            else:
+                if axis==0 or axis is None and x.ndim==1: 
+                    nl = min(nq,x.shape[0])
+                    return dot(q[:,:nl],x[:nl])
+                elif axis==1: 
+                    nl = min(nq,x.shape[1])
+                    return dot(x[...,:nl],q[:,:nl].T)
+                elif axis is None:
+                    nl = min(nq,x.shape[0])
+                    return dot(dot(q[:,:nl],x[:nl,:nl]),q[:,:nl].T)
+        return c2_bin
+
     bindat = None
     
     if (binstr=="ctp"):
