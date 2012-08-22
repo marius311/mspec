@@ -38,7 +38,7 @@ if __name__=="__main__":
         num_unseen = mp[mask*mp<-1e20].shape[0]
         if (num_unseen>0):
             print "Warning: Inpainting "+str(num_unseen)+" remaining UNSEEN pixels after masking "+file
-            m = inpaint(m)
+            mp = inpaint(mp)
         if mask!=None: mp*=mask
         det.insert(1,"T")
         return (file,det,H.map2alm(mp,lmax=lmax))
