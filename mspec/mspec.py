@@ -1,6 +1,7 @@
 from ast import literal_eval
 from bisect import bisect_right, bisect_left
 from collections import namedtuple, defaultdict
+from itertools import takewhile
 from numpy import *
 from numpy.linalg import norm
 from scipy.optimize import fmin
@@ -475,18 +476,27 @@ def get_bin_func(binstr):
     Valid binning functions are:
     WMAP -- WMAP binning at low-ell, SPT binning at high-ell
     CTP -- CTP binning
+    C2 -- C2 comparison binning
     flat(x) -- Uniform bins of width x
     """
     binstr = binstr.lower()
     
     if (binstr=="none"): return lambda x: x
     
+    def slice_bins(lmins,lmaxs,lslice):
+        """Gets bin slice correpsonding to ell-slice 's'."""
+        return slice(None if lslice.start is None else bisect_left(lmins,lslice.start),
+                     None if lslice.stop is None else bisect_left(lmaxs,lslice.stop))
+
     if binstr=='c2':
         q = loadtxt(os.path.join(Mrootdir,"dat/c2_binning"))
         nq = q.shape[1]
         def c2_bin(x,axis=None):
             if type(x)==slice:
-                pass
+                ilen = lambda i: sum(1 for _ in i)
+                return slice_bins(lmins=[ilen(takewhile(lambda x: x<1e-5,qe)) for qe in q],
+                                  lmaxs=[len(qe) - ilen(takewhile(lambda x: x<1e-5,qe[::-1])) for qe in q],
+                                  lslice=x)
             else:
                 if axis==0 or axis is None and x.ndim==1: 
                     nl = min(nq,x.shape[0])
@@ -516,8 +526,9 @@ def get_bin_func(binstr):
     
     def bin(x,axis=None):
         if type(x)==slice:
-            return slice(None if x.start is None else bisect_left([s[0] for s in bindat],x.start),
-                         None if x.stop is None else bisect_left([s[-1] for s in bindat],x.stop))
+            return slice_bins(lmins=[s[0] for s in bindat],
+                              lmaxs=[s[-1] for s in bindat],
+                              lslice=x)
         else:
             bins = bindat[:bisect_left([s[-1] for s in bindat],len(x))]
             for a in ([axis] if axis!=None else range(x.ndim)): x = array([x.take(s,axis=a).mean(axis=a) for s in bins]).swapaxes(a,0)
