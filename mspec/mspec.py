@@ -77,6 +77,9 @@ class SymmetricTensorDict(dict):
             for k in set([((a,b),(c,d)),((b,a),(c,d)),((a,b),(d,c)),((b,a),(d,c))]): dict.__setitem__(self,k,value)
             for k in set([((c,d),(a,b)),((c,d),(b,a)),((d,c),(a,b)),((d,c),(b,a))]): dict.__setitem__(self,k,value.T if type(value)==ndarray else value)
 
+    def setdefault(self, key, value):
+        if key not in self: self[key]=value
+        return self[key]
 
     def get_index_values(self):
         """Gets all the unique values which one of the indices can take."""
@@ -149,6 +152,7 @@ class PowerSpectra(object):
             self.ells = arange(len(self.spectra.values()[0]))
             
     def __getitem__(self,key):
+        if not isinstance(key,tuple): key = (key,key)
         return self.spectra[key]
     
     def __setitem__(self,key,value):
@@ -196,7 +200,7 @@ class PowerSpectra(object):
     def save_as_matrix(self,fileroot):
         """Save the matrix representation of this PowerSpectra to file"""
         spec_mat, cov_mat = self.get_as_matrix()
-        save_multi(fileroot+"_spec",spec_mat)
+        save_multi(fileroot+"_spec",spec_mat,npy=False)
         if cov_mat!=None: save_multi(fileroot+"_cov",cov_mat)    
     
     def calibrated(self,maps,ells,weighting=1):

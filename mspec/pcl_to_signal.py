@@ -8,6 +8,10 @@ from collections import namedtuple, defaultdict
 from utils import *
 import utils
 from bisect import bisect_right
+
+#workaround when no-display
+import matplotlib as mpl
+mpl.rcParams['backend']='PDF'
 import healpy as H
 
 
@@ -39,7 +43,7 @@ if __name__=="__main__":
     else: 
         if str2bool(params.get("optimal_weights",'T')): weight = get_optimal_weights(pcls)
         else: weight = {(a,b): 0 if a==b else 1 for (a,b) in pairs(pcl.get_maps())}
-    
+
     # Load mode coupling matrices
     if (params.get("mask")):
         if (is_mpi_master()): print "Loading mode coupling matrices..."
@@ -110,7 +114,7 @@ if __name__=="__main__":
 
                 abcds=[((a,b),(c,d)) 
                        for (a,b) in pairs(maps) for (c,d) in pairs(maps)
-                       if a.fr==alpha and b.fr==beta and c.fr==gamma and d.fr==delta]
+                       if (a.fr,b.fr) in [(alpha,beta),(beta,alpha)] and (c.fr,d.fr) in [(gamma,delta),(delta,gamma)]]
                 
                 hat_cls_freq.cov[((alpha,beta),(gamma,delta))] = \
                     sum(weight[(a,b)]*weight[(c,d)]*hat_cls_det.cov[((a,b),(c,d))] for ((a,b),(c,d)) in abcds) \
