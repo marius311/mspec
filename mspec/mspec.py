@@ -25,6 +25,7 @@ __all__ = ['MapID',
            'fid_cmb',
            'load_subpix',
            'get_optimal_weights',
+           'get_pcl_noise',
            'def_map_regex',
            'inpaint']
 
@@ -485,7 +486,7 @@ def get_bin_func(binstr):
     """
     binstr = binstr.lower()
     
-    if (binstr=="none"): return lambda x: x
+    if (binstr is None or binstr=="none"): return lambda x, **kwargs: x
     
     def slice_bins(lmins,lmaxs,lslice):
         """Gets bin slice correpsonding to ell-slice 's'."""
@@ -543,18 +544,13 @@ def get_bin_func(binstr):
         return bin
     else: raise ValueError("Unknown binning function '"+binstr+"'")
 
-def get_optimal_weights(pcl, freqs=None, bootstrap_weights=None, noise_range=(1500,2500)):
+
+def get_pcl_noise(pcl, freqs=None, bootstrap_weights=None):
     """
-    Gets the inverse variance weighting of cross spectra given noise 
-    levels computed from the given pseudo-Cl's
-    
     To compute noise levels we look at auto minus average-of-cross-spectra.
     The `bootstrap_weights` come in when computing this average. The default
     is equal weights, but one can imagine iterating this function a few times
     (althought its probably totally unnecessary).
-
-    The returned dictionary is symmetric for convenience only. One should
-    not sum over all power spectra.
     """
     maps = pcl.get_maps()
     freqs = freqs or set(m.fr for m in maps)
@@ -569,9 +565,30 @@ def get_optimal_weights(pcl, freqs=None, bootstrap_weights=None, noise_range=(15
                 bootstrap_weights[a,b]
                 for (a,b) in pairs(maps) if (a.fr,b.fr) in [(alpha,beta),(beta,alpha)] and a!=b
             )
+
+    pcl_nl = {m:(pcl[m,m] - pcl_sig[m.fr,m.fr]) for m in maps if m.fr in freqs}
+
+    return pcl_nl
+
+
+
+def get_optimal_weights(pcl, freqs=None, bootstrap_weights=None, noise_range=(1500,2500)):
+    """
+    Gets the inverse variance weighting of cross spectra given noise 
+    levels computed from the given pseudo-Cl's
     
-    pcl_nl = {m:mean((pcl[m,m] - pcl_sig[m.fr,m.fr])[slice(*noise_range)]) for m in maps if m.fr in freqs}
-    
+    To compute noise levels we look at auto minus average-of-cross-spectra.
+    The `bootstrap_weights` come in when computing this average. The default
+    is equal weights, but one can imagine iterating this function a few times
+    (althought its probably totally unnecessary).
+
+    The returned dictionary is symmetric for convenience only. One should
+    not sum over all power spectra.
+    """
+    freqs = freqs or set(m.fr for m in pcl.get_maps())   
+
+    pcl_nl = {m:mean(nl[slice(*noise_range)]) for m,nl in get_pcl_noise(pcl,freqs,bootstrap_weights).items()}
+   
     all_weights = {}
     for (alpha,beta) in pairs(freqs):
         weights = {(a,b):0 if a==b else 1/pcl_nl[a]/pcl_nl[b] for a,b in pcl.get_spectra() if (a.fr,b.fr) in [(alpha,beta),(beta,alpha)]}

@@ -6,6 +6,8 @@ import sys, os, re, gc
 from numpy import *
 import healpy as H
 
+mpi_map = map
+
 if __name__=="__main__":
 
     params = read_Mspec_ini(sys.argv[1:])
@@ -39,11 +41,16 @@ if __name__=="__main__":
         if (num_unseen>0):
             print "Warning: Inpainting "+str(num_unseen)+" remaining UNSEEN pixels after masking "+file
             mp = inpaint(mp)
-        if mask!=None: mp*=mask
+        mp*=params.get('map_rescale',1)
+
+        if mask!=None:
+            if params.get('subtract_mean',False): mp -= (sum(mask*mp)/sum(mask))
+            mp*=mask
         det.insert(1,"T")
         return (file,det,H.map2alm(mp,lmax=lmax))
-        
-    alms = mpi_map(maps2alm,maps,distribute=True)    
+
+    alms = mpi_map(maps2alm,maps)            
+    #alms = mpi_map(maps2alm,maps,distribute=True)    
     
     # Figure out all the powerspectra we need to compute and their output file names
     almpairs = [(alm1,alm2,os.path.join(params["pcls"],"-".join(d1)+'__'+"-".join(d2))) for ((m1,d1,alm1),(m2,d2,alm2)) in pairs(alms)]

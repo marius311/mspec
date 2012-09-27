@@ -42,7 +42,8 @@ if __name__=="__main__":
     if str2bool(params.get("use_auto_spectra",'F')): weight = defaultdict(lambda: 1)
     else: 
         if str2bool(params.get("optimal_weights",'T')): weight = get_optimal_weights(pcls)
-        else: weight = {(a,b): 0 if a==b else 1 for (a,b) in pairs(pcl.get_maps())}
+        else: weight = {(a,b): 0 if a==b else 1 for a in pcls.get_maps() for b in pcls.get_maps()}
+
 
     # Load mode coupling matrices
     if (params.get("mask")):
@@ -55,14 +56,15 @@ if __name__=="__main__":
         imll=1
         gll2=diag(1./(2*arange(lmax)+1))
 
-    if params.get('deconv_pixwin',True): 
-        import healpy as H
-        for (a,b) in pairs(maps): pcls[(a,b)]/=H.pixwin(2048)[:lmax]**2
-
+#    if params.get('deconv_pixwin',True): 
+#        import healpy as H
+#        for (a,b) in pairs(maps): pcls[(a,b)]/=H.pixwin(2048)[:lmax]**2
+    
     #Equation (4), the per detector signal estimate
     if (is_mpi_master()): print "Calculating per-detector signal..."
     hat_cls_det = PowerSpectra(ells=bin(ells))
-    for (a,b) in pairs(maps): hat_cls_det[(a,b)] = bin(todl*(dot(imll,pcls[(a,b)]) - (noise[a] if a==b else 0) - subpix[a,b])/(beam[(a,b)]))
+    for (a,b) in pairs(maps): 
+        hat_cls_det[(a,b)] = bin(todl*(dot(imll,pcls[(a,b)]) - (noise[a] if a==b else 0) - subpix[a,b])/beam[(a,b)]/H.pixwin(2048)[:lmax]**2)
 
     # Do per detector calibration
     if (str2bool(params.get('do_calibration',True))):
@@ -70,6 +72,7 @@ if __name__=="__main__":
         calib = dict(flatten([[(m,a) for (m,[(_,a)]) in hat_cls_det.calibrated([m for m in maps if m.fr==fr], bin(slice(150,300))) if m.fr==fr] for fr in freqs]))
         for (a,b) in pairs(maps): hat_cls_det[(a,b)] *= calib[a]*calib[b]
     else: calib = defaultdict(lambda: 1)
+
 
     # Equation (6), the per frequency signal estimate
     if (is_mpi_master()): print "Calculating signal..."
@@ -83,12 +86,14 @@ if __name__=="__main__":
                 for (a,b) in pairs(maps) if (a.fr, b.fr) in [(alpha,beta),(beta,alpha)]
             )
     
+
+
     # The fiducial model for the mask deconvolved Cl's which gets used in the covariance
     if str2bool(params.get("get_covariance",False)):
         if (is_mpi_master()): print "Calculating fiducial signal..."
         fid_cls = PowerSpectra(ells=ells)
         for (a,b) in pairs(maps):
-            fid_cls[(a,b)] = smooth(dot(imll,pcls[(a,b)])*(ells+2)**2,window_len=50)/(ells+2)**2*calib[a]*calib[b]
+            fid_cls[(a,b)] = smooth(dot(imll,pcls[(a,b)])/H.pixwin(2048)[:lmax]**2*(ells+2)**2,window_len=50)/(ells+2)**2*calib[a]*calib[b]
             fid_cls[(a,b)][:20] = 1000/arange(1,21)**2*2*pi
 
     
