@@ -89,6 +89,18 @@ def mpi_map(function,sequence,distribute=True):
                 comm.gather(map(function, partition(sequence,size)[rank]))
                 return []
 
+
+def mpi_map_array(function,sequence):
+    (rank,size,comm) = get_mpi()
+    sequence = mpi_consistent(sequence)
+    nper = int(ceil(float(len(sequence))/size))
+    buf = zeros([nper]+list(shape))
+    for i,x in enumerate(sequence[rank*nper:(rank+1)*nper]): buf[i]=function(x)
+    allbuf = zeros([size,nper]+list(shape))
+    comm.Allgather(buf,allbuf)
+    return allbuf.reshape([size*nper]+list(shape))[:len(sequence)]
+
+
 def load_multi(path):
     """ Load either path or path.npy """
     if os.path.exists(path+".npy"): return array(load(path+".npy"),dtype=def_dtype)

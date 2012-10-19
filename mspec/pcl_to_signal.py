@@ -32,7 +32,10 @@ if __name__=="__main__":
     subpix = load_subpix(params) if params.get("subpix",None) else defaultdict(lambda: 0)
     
     freqs = params.get("freqs")
-    maps = set(m for m in pcls.get_maps() if (m.fr in freqs if freqs!=None else True))
+    if 'maps_ids' in params:
+        maps = set(MapID(m) for m in params.get('maps_ids'))
+    else:
+        maps = set(m for m in pcls.get_maps() if (m.fr in freqs if freqs!=None else True))
     if params.get("beams",None): maps&=set(beam.get_maps())
     if params.get("noise",None): maps&=set(noise.get_keys())
     freqs = set(m.fr for m in maps)

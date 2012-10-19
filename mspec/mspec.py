@@ -204,6 +204,55 @@ class PowerSpectra(object):
         save_multi(fileroot+"_spec",spec_mat,npy=False)
         if cov_mat!=None: save_multi(fileroot+"_cov",cov_mat)    
     
+    def save_as_fits(self, fileroot):
+        from pyfits import new_table, ColDefs, Column, HDUList, PrimaryHDU, Header
+        hdus = []
+        spectra = new_table(ColDefs([Column(name=str(ps), format='D', array=self[ps]) for ps in pairs(self.get_maps())]))
+        spectra.name = 'SPECTRA'
+        hdus.append(spectra)
+        
+        if self.cov is not None:
+            cov = new_table(ColDefs([Column(name=str(ps), format='D', array=self.cov[ps].ravel()) for ps in pairs(pairs(self.get_maps()))]))
+            cov.name = 'COVS'
+            flatcov = new_table(ColDefs([Column(name='cov', format='D', array=self.get_as_matrix().cov.ravel())]))
+            flatcov.name = 'FULLCOV'
+            hdus.extend([cov,flatcov])
+
+        if self.binning is not None:
+            nq = max([len(x) for x in self.spectra.values()])
+            binning = new_table(ColDefs([Column(name='bins', format='D', array=self.binning.q[:nq].ravel())]))
+            binning.name = 'BINNING'
+            hdus.append(binning)            
+            
+        HDUList([PrimaryHDU()]+hdus).writeto(fileroot,clobber=True)
+        
+    @staticmethod
+    def load_from_fits(fileroot):
+        from pyfits import open
+        
+        spectra, cov, binning, ells = [None]*4
+        
+        with open(fileroot) as f:
+            exts = {ext.name:ext for ext in f}
+            
+            spectra = {eval(n):exts['SPECTRA'].data[n] for n in exts['SPECTRA'].columns.names}
+            nq = len(spectra.values()[0])
+               
+            if 'COVS' in exts:
+                cov = {eval(n):exts['COVS'].data[n].reshape(nq,nq) for n in exts['COVS'].columns.names}
+                
+            if 'BINNING' in exts:
+                q = exts['BINNING'].data['bins']
+                q = q.reshape((nq,q.size/nq))
+                bin = get_bin_func('q',q=q)
+                ells = bin(arange(10000))
+        
+        return PowerSpectra(spectra=spectra,
+                            cov=cov,
+                            binning=bin,
+                            ells=ells)
+        
+        
     def calibrated(self,maps,ells,weighting=1):
         """
         Return calibration factors corresponding to calibrating 
@@ -473,7 +522,7 @@ def skycut_mask(nside,percent,dth=deg2rad(10),apod_fn=lambda x: cos(pi*(x-1)/4)*
     return mask
 
 
-def get_bin_func(binstr):
+def get_bin_func(binstr,q=None):
     """
     Returns a binning function bin(x,axis=None) where x can be any rank array and 
     axis specifies the binning axis, or None for all axes.
@@ -493,14 +542,16 @@ def get_bin_func(binstr):
         return slice(None if lslice.start is None else bisect_left(lmins,lslice.start),
                      None if lslice.stop is None else bisect_left(lmaxs,lslice.stop))
 
-    if binstr=='c2':
-        q = loadtxt(os.path.join(Mrootdir,"dat/c2_binning"))
-        nq = q.shape[1]
-        def c2_bin(x,axis=None):
+    def get_q_bin(q):
+        ilen = lambda i: sum(1 for _ in i)
+        lmins = [ilen(takewhile(lambda x: x<1e-5,qe)) for qe in q]
+        lmaxs = [len(qe) - ilen(takewhile(lambda x: x<1e-5,qe[::-1])) for qe in q]
+        
+        def q_bin(x,axis=None):
+            nq = q.shape[1]
             if type(x)==slice:
-                ilen = lambda i: sum(1 for _ in i)
-                return slice_bins(lmins=[ilen(takewhile(lambda x: x<1e-5,qe)) for qe in q],
-                                  lmaxs=[len(qe) - ilen(takewhile(lambda x: x<1e-5,qe[::-1])) for qe in q],
+                return slice_bins(lmins=lmins,
+                                  lmaxs=lmaxs,
                                   lslice=x)
             else:
                 if axis==0 or axis is None and x.ndim==1: 
@@ -512,37 +563,40 @@ def get_bin_func(binstr):
                 elif axis is None:
                     nl = min(nq,x.shape[0])
                     return dot(dot(q[:,:nl],x[:nl,:nl]),q[:,:nl].T)
-        return c2_bin
+                
+        q_bin.q = q
+        q_bin.lmaxs = lmaxs
+        q_bin.lmins = lmins
+        return q_bin
 
-    bindat = None
+
+    def lims_to_q(lims):
+        """lims is a list of (start,end), both inclusive."""
+        q = zeros((len(lims),6000))
+        for i,(s,e) in enumerate(lims): q[i,s:e+1] = 1. / (e-s+1)
+        return q
     
-    if (binstr=="ctp"):
+    if binstr=='q':
+        return get_q_bin(q)
+    
+    if binstr=='c2':
+        return get_q_bin(loadtxt(os.path.join(Mrootdir,"dat/c2_binning")))
+    
+    if binstr=="ctp":
         ctpbins=loadtxt(os.path.join(Mrootdir,"dat/CTP_bin_TT_orig"),dtype=int)
-        bindat=[arange(s,e+1) for [s,e] in ctpbins[:,[1,2]]]+[arange(l,l+200) for l in range(3001,6000,200)]
+        return get_q_bin(lims_to_q(list(ctpbins[:,[1,2]])+[(l,l+200) for l in range(3001,6000,200)]))
     
-    if (binstr=='wmap'): 
+    if binstr=='wmap': 
         wmapbins=loadtxt(os.path.join(Mrootdir,"dat/wmap_binned_tt_spectrum_7yr_v4p1.txt"),dtype=int)
-        bindat=[arange(s,e+1) for [s,e] in wmapbins[:-2,[1,2]]]+[arange(l,l+50) for l in range(1001,2000,50)]+[arange(l,l+200) for l in range(2001,4000,200)]
+        return get_q_bin(lims_to_q(list(wmapbins[:-2,[1,2]])+[(l,l+50) for l in range(1001,2000,50)]+[(l,l+200) for l in range(2001,4000,200)]))
 
     r = re.match("flat\((?:dl=)?([0-9]+)\)",binstr)
-    if (r!=None):
+    if r!=None:
         dl=int(r.group(1))
-        bindat=[arange(l,l+dl) for l in dl*arange(10000/dl)]
+        return get_q_bin(lims_to_q([(l,l+dl) for l in dl*arange(10000/dl)]))
     
-    def bin(x,axis=None):
-        if type(x)==slice:
-            return slice_bins(lmins=[s[0] for s in bindat],
-                              lmaxs=[s[-1] for s in bindat],
-                              lslice=x)
-        else:
-            bins = bindat[:bisect_left([s[-1] for s in bindat],len(x))]
-            for a in ([axis] if axis!=None else range(x.ndim)): x = array([x.take(s,axis=a).mean(axis=a) for s in bins]).swapaxes(a,0)
-            return x
-        
-    if bindat!=None: 
-        bin._bindat = bindat
-        return bin
-    else: raise ValueError("Unknown binning function '"+binstr+"'")
+
+    raise ValueError("Unknown binning function '"+binstr+"'")
 
 
 def get_pcl_noise(pcl, freqs=None, bootstrap_weights=None):
@@ -610,30 +664,35 @@ def clean_signal(sig,clean,weight=1,range=slice(0,-1)):
                 (clean,fmin(lambda x: sum(weight[range]*(sigu[(m,m)][range]-2*x*sigu[(m,clean)][range]+x**2*sigu[(clean,clean)][range]))/(1-2*x+x**2),.05,disp=False)[0])] 
             for m in set(sig.get_maps())-set([clean])}  
 
-def load_signal(params, clean=False, calib=False, calibrange=slice(150,500), loadcov=True):
+def load_signal(signal, clean=False, calib=False, calibrange=slice(150,500), loadcov=True):
     """
     Loads the signal computed by pcl_to_signal.py
     
     Keyword arguments:
-    params -- The parameter file
+    signal -- The parameter file
     clean -- Whether to apply cleaning (default=False)
     calib --Whether to do inter-frequency calibration (default=False)
     calibrange -- A slice object corresponding to the range of ells over which
                   to do the calibration (default=slice(150,500))
     loadcov -- Whether to load the covariance (default=True)
     """
-    params = read_Mspec_ini(params)
-    bin = params['binning']
-    ells, spectra = load_multi(params["signal"]+"_spec").T
-    ells = array(sorted(set(ells)))
-    cov = None
-    if loadcov and str2bool(params.get("get_covariance",True)):
-        try: cov = load_multi(params["signal"]+"_cov")
-        except IOError: pass
-    signal = PowerSpectra(spectra, cov, ells, params.get("freqs"),binning=params["binning"])
-    if clean and "cleaning" in params: signal = signal.lincombo(params["cleaning"])
-    if calib: signal = signal.lincombo(signal.calibrated(signal.get_maps(),calibrange),normalize=False)
-    return signal
+    if not isinstance(signal,str) or isinstance(dict,str):
+        raise ValueError("Unrecognizable type for signal, '%s'"%type(signal))
+    
+    fileroot = signal if isinstance(signal,str) else signal['signal']
+    
+    if fileroot.endswith('.fits'):
+        return PowerSpectra.load_from_fits(fileroot)
+    else:
+        params = read_Mspec_ini(signal)
+        bin = params['binning']
+        ells, spectra = load_multi(params["signal"]+"_spec").T
+        ells = array(sorted(set(ells)))
+        cov = None
+        if loadcov and str2bool(params.get("get_covariance",True)):
+            try: cov = load_multi(params["signal"]+"_cov")
+            except IOError: pass
+        return PowerSpectra(spectra, cov, ells, params.get("freqs"),binning=params["binning"])
 
 
 def load_clean_calib_signal(params, calibrange=slice(150,500), loadcov=True):
@@ -663,22 +722,32 @@ def load_pcls(params):
 
 def load_beams(params):
     """Load the beams"""
-    params = read_Mspec_ini(params)
-    regex=re.compile(params.get("map_regex",def_map_regex))
-    files = [(os.path.join(params["beams"],f),[MapID(m.group(1),'T',m.group(2)) for m in regex.finditer(f)]) for f in os.listdir(params["beams"])]
-    beams = SymmetricTensorDict(rank=2)
-    
-    beampow = {'bl':2,'wl':1}[params.get("beam_format","bl")] 
-    
-    for (f,m) in files:
-        if len(m)==1: beams[(m[0],m[0])] = load_multi(f)[:int(params["lmax"]),params.get("beam_col",1)]**beampow
-        elif len(m)==2: beams[(m[0],m[1])] = load_multi(f)[:int(params["lmax"]),params.get("beam_col",1)]**beampow
+    if params["beams"].endswith(".fits"):
+        import pyfits
+        with pyfits.open(params["beams"]) as f:
+            beams = PowerSpectra({tuple(tuple([x.split('-')[0],'T']+x.split('-')[1:]) 
+                                        for x in h.name[5:].split('X')):h.data['BEAM'][0] 
+                                  for h in f if h.name.startswith('BEAM') and 'BEAM' in h.columns.names})
+            
+        return beams
         
-    for (m1,m2) in pairs(beams.get_index_values()):
-        if (m1,m2) not in beams: 
-            beams[(m1,m2)] = sqrt(beams[(m1,m1)]*beams[(m2,m2)])
+    else:
+        params = read_Mspec_ini(params)
+        regex=re.compile(params.get("map_regex",def_map_regex))
+        files = [(os.path.join(params["beams"],f),[MapID(m.group(1),'T',m.group(2)) for m in regex.finditer(f)]) for f in os.listdir(params["beams"])]
+        beams = SymmetricTensorDict(rank=2)
+        
+        beampow = {'bl':2,'wl':1}[params.get("beam_format","bl")] 
+        
+        for (f,m) in files:
+            if len(m)==1: beams[(m[0],m[0])] = load_multi(f)[:int(params["lmax"]),params.get("beam_col",1)]**beampow
+            elif len(m)==2: beams[(m[0],m[1])] = load_multi(f)[:int(params["lmax"]),params.get("beam_col",1)]**beampow
+            
+        for (m1,m2) in pairs(beams.get_index_values()):
+            if (m1,m2) not in beams: 
+                beams[(m1,m2)] = sqrt(beams[(m1,m1)]*beams[(m2,m2)])
     
-    return PowerSpectra(beams)
+        return PowerSpectra(beams)
         
         
 def load_subpix(params, col=5):
