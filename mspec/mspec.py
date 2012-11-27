@@ -580,7 +580,7 @@ def get_bin_func(binstr,q=None):
         return get_q_bin(q)
     
     if binstr=='c2':
-        return get_q_bin(loadtxt(os.path.join(Mrootdir,"dat/c2_binning")))
+        return get_q_bin(np.load(os.path.join(Mrootdir,"dat/c2_binning.npy")))
     
     if binstr=="ctp":
         ctpbins=loadtxt(os.path.join(Mrootdir,"dat/CTP_bin_TT_orig"),dtype=int)
