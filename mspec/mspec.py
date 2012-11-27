@@ -676,7 +676,7 @@ def load_signal(signal, clean=False, calib=False, calibrange=slice(150,500), loa
                   to do the calibration (default=slice(150,500))
     loadcov -- Whether to load the covariance (default=True)
     """
-    if not isinstance(signal,str) or isinstance(dict,str):
+    if not isinstance(signal,(dict,str)):
         raise ValueError("Unrecognizable type for signal, '%s'"%type(signal))
     
     fileroot = signal if isinstance(signal,str) else signal['signal']
