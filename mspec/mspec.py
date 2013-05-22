@@ -556,13 +556,16 @@ def get_bin_func(binstr,q=None):
             else:
                 if axis==0 or axis is None and x.ndim==1: 
                     nl = min(nq,x.shape[0])
-                    return dot(q[:,:nl],x[:nl])
+                    nqp = slice_bins(lmins, lmaxs=lmaxs, lslice=slice(0,nl))
+                    return dot(q[nqp,:nl],x[:nl])
                 elif axis==1: 
                     nl = min(nq,x.shape[1])
-                    return dot(x[...,:nl],q[:,:nl].T)
+                    nqp = slice_bins(lmins, lmaxs=lmaxs, lslice=slice(0,nl))
+                    return dot(x[...,:nl],q[nqp,:nl].T)
                 elif axis is None:
                     nl = min(nq,x.shape[0])
-                    return dot(dot(q[:,:nl],x[:nl,:nl]),q[:,:nl].T)
+                    nqp = slice_bins(lmins, lmaxs=lmaxs, lslice=slice(0,nl))
+                    return dot(dot(q[nqp,:nl],x[:nl,:nl]),q[nqp,:nl].T)
                 
         q_bin.q = q
         q_bin.lmaxs = lmaxs
@@ -587,7 +590,7 @@ def get_bin_func(binstr,q=None):
         return get_q_bin(lims_to_q(list(ctpbins[:,[1,2]])+[(l,l+200) for l in range(3001,6000,200)]))
     
     if binstr=='wmap': 
-        wmapbins=loadtxt(os.path.join(Mrootdir,"dat/wmap_binned_tt_spectrum_7yr_v4p1.txt"),dtype=int)
+        wmapbins=array(loadtxt(os.path.join(Mrootdir,"dat/wmap_binned_tt_spectrum_7yr_v4p1.txt")),dtype=int)
         return get_q_bin(lims_to_q(list(wmapbins[:-2,[1,2]])+[(l,l+50) for l in range(1001,2000,50)]+[(l,l+200) for l in range(2001,4000,200)]))
 
     r = re.match("flat\((?:dl=)?([0-9]+)\)",binstr)
