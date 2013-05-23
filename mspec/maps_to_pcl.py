@@ -4,6 +4,10 @@ from mspec import *
 from utils import *
 import sys, os, re, gc
 from numpy import *
+
+#workaround when no-display
+import matplotlib as mpl
+mpl.rcParams['backend']='PDF'
 import healpy as H
 
 mpi_map = map
@@ -38,9 +42,13 @@ if __name__=="__main__":
         elif params.get('ring2nest'): mp=H.reorder(mp,r2n=True)
         
         num_unseen = mp[mask*mp<-1e20].shape[0]
-        if (num_unseen>0):
+        if (num_unseen>0 and params.get('inpaint',True)):
             print "Warning: Inpainting "+str(num_unseen)+" remaining UNSEEN pixels after masking "+file
-            mp = inpaint(mp)
+            mp = inpaint(mp,num_degrades=2)
+        else:
+            print "Warning: Zeroing "+str(num_unseen)+" remaining UNSEEN pixels after masking "+file
+            mp[mask*mp<-1e20] = 0
+
         mp*=params.get('map_rescale',1)
 
         if mask!=None:

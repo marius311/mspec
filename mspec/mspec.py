@@ -149,8 +149,9 @@ class PowerSpectra(object):
         
         assert self.spectra or self.ells!=None, "You must either provide some spectra or some ells"
         if self.ells==None: 
-            assert self.binning == None, "If you provide binning, you must also provide the ells."
-            self.ells = arange(len(self.spectra.values()[0]))
+            bmax = max(s.shape[0] for s in self.spectra.values())
+            if self.binning is None: self.ells = arange(bmax)
+            else: self.ells = self.binning(arange(20000))[:bmax]
             
     def __getitem__(self,key):
         if not isinstance(key,tuple): key = (key,key)
@@ -159,6 +160,13 @@ class PowerSpectra(object):
     def __setitem__(self,key,value):
         self.spectra[key]=value
     
+    def deepcopy(self):
+        return PowerSpectra(ells=self.ells.copy(),
+                     spectra={k:v.copy() for k,v in self.spectra.items()},
+                     cov={k:v.copy() for k,v in self.cov.items()} if self.cov else None,
+                     binning=self.binning)
+
+
     def get_maps(self):
         """Gets keys for all maps"""
         return sorted(self.spectra.get_index_values())
@@ -207,11 +215,11 @@ class PowerSpectra(object):
     def save_as_fits(self, fileroot):
         from pyfits import new_table, ColDefs, Column, HDUList, PrimaryHDU, Header
         hdus = []
-        spectra = new_table(ColDefs([Column(name=str(ps), format='D', array=self[ps]) for ps in pairs(self.get_maps())]))
+        spectra = new_table(ColDefs([Column(name=str(ps), format='D', array=self[ps]) for ps in pairs(self.get_maps()) if ps in self.spectra]))
         spectra.name = 'SPECTRA'
         hdus.append(spectra)
         
-        if self.cov is not None:
+        if self.cov:
             cov = new_table(ColDefs([Column(name=str(ps), format='D', array=self.cov[ps].ravel()) for ps in pairs(pairs(self.get_maps()))]))
             cov.name = 'COVS'
             flatcov = new_table(ColDefs([Column(name='cov', format='D', array=self.get_as_matrix().cov.ravel())]))
@@ -246,7 +254,9 @@ class PowerSpectra(object):
                 q = q.reshape((nq,q.size/nq))
                 bin = get_bin_func('q',q=q)
                 ells = bin(arange(10000))
-        
+            else:
+                bin = None
+
         return PowerSpectra(spectra=spectra,
                             cov=cov,
                             binning=bin,
@@ -349,8 +359,8 @@ class PowerSpectra(object):
         fspec -- A function of (k,c) applied to the covariances where k is the 
                  covariance key and c is the covariance (default=identity) 
         """
-        spectra = SymmetricTensorDict([(k,fspec(k,self.spectra[k])) for k in pairs(self.get_maps())],rank=2)
-        if self.cov: cov = SymmetricTensorDict([(k,fcov(k,self.cov[k])) for k in pairs(pairs(self.get_maps()))],rank=4)
+        spectra = SymmetricTensorDict([(k,fspec(k,self.spectra[k])) for k in pairs(self.get_maps()) if k in self.spectra],rank=2)
+        if self.cov: cov = SymmetricTensorDict([(k,fcov(k,self.cov[k])) for k in pairs(pairs(self.get_maps())) if k in self.cov],rank=4)
         else: cov = None
         return PowerSpectra(spectra,cov,self.ells,binning=self.binning)
 
@@ -587,7 +597,7 @@ def get_bin_func(binstr,q=None):
         return get_q_bin(lims_to_q(list(ctpbins[:,[1,2]])+[(l,l+200) for l in range(3001,6000,200)]))
     
     if binstr=='wmap': 
-        wmapbins=loadtxt(os.path.join(Mrootdir,"dat/wmap_binned_tt_spectrum_7yr_v4p1.txt"),dtype=int)
+        wmapbins=array(loadtxt(os.path.join(Mrootdir,"dat/wmap_binned_tt_spectrum_7yr_v4p1.txt"))[:,:3],dtype=int)
         return get_q_bin(lims_to_q(list(wmapbins[:-2,[1,2]])+[(l,l+50) for l in range(1001,2000,50)]+[(l,l+200) for l in range(2001,4000,200)]))
 
     r = re.match("flat\((?:dl=)?([0-9]+)\)",binstr)
@@ -676,7 +686,8 @@ def load_signal(signal, clean=False, calib=False, calibrange=slice(150,500), loa
                   to do the calibration (default=slice(150,500))
     loadcov -- Whether to load the covariance (default=True)
     """
-    if not isinstance(signal,str) or isinstance(dict,str):
+
+    if not isinstance(signal,(str,dict)):
         raise ValueError("Unrecognizable type for signal, '%s'"%type(signal))
     
     fileroot = signal if isinstance(signal,str) else signal['signal']
@@ -687,12 +698,11 @@ def load_signal(signal, clean=False, calib=False, calibrange=slice(150,500), loa
         params = read_Mspec_ini(signal)
         bin = params['binning']
         ells, spectra = load_multi(params["signal"]+"_spec").T
-        ells = array(sorted(set(ells)))
         cov = None
         if loadcov and str2bool(params.get("get_covariance",True)):
             try: cov = load_multi(params["signal"]+"_cov")
             except IOError: pass
-        return PowerSpectra(spectra, cov, ells, params.get("freqs"),binning=params["binning"])
+        return PowerSpectra(spectra, cov, maps=params.get("freqs"),binning=params["binning"])
 
 
 def load_clean_calib_signal(params, calibrange=slice(150,500), loadcov=True):
@@ -715,29 +725,33 @@ def load_chain(params):
 def load_pcls(params):
     """Load the pcls computed by maps_to_pcls.py"""
     params = read_Mspec_ini(params)
-    regex=re.compile(params.get("map_regex",def_map_regex))
-    files = [(os.path.join(params["pcls"],f),[MapID(m.group(1),'T',m.group(2)) for m in regex.finditer(f)]) for f in os.listdir(params["pcls"])]
-    return PowerSpectra({tuple(m):load_multi(f)[:int(params["lmax"])] for (f,m) in files if len(m)==2})
+    regex=re.compile(params.get("pcl_regex",params.get("map_regex",def_map_regex)))
+    files = [(os.path.join(params["pcls"],f),[MapID(m.group(1),'T',m.group(2).lower()) for m in regex.finditer(f)]) for f in os.listdir(params["pcls"])]
+    return PowerSpectra({tuple(m):load_multi(f) for (f,m) in files if len(m)==2})
 
 
-def load_beams(params):
+def load_beams(params,slice_lmax=False):
     """Load the beams"""
-    if params["beams"].endswith(".fits"):
+
+    params = read_Mspec_ini(params)
+    beampow = {'bl':2,'wl':1}[params.get("beam_format","bl")] 
+
+    if "beams_rimo" in params: 
         import pyfits
-        with pyfits.open(params["beams"]) as f:
-            beams = PowerSpectra({tuple(tuple([x.split('-')[0],'T']+x.split('-')[1:]) 
-                                        for x in h.name[5:].split('X')):h.data['BEAM'][0] 
-                                  for h in f if h.name.startswith('BEAM') and 'BEAM' in h.columns.names})
-            
+        with pyfits.open(params["beams_rimo"]) as f:
+            beams = PowerSpectra({tuple(tuple([x.split('-')[0],'T']+[y.lower() for y in x.split('-')[1:]]) 
+                                        for x in h.name[5:].split('X')):h.data['BEAM'][0]**beampow
+                                  for h in f if h.name.startswith('BEAM') and 'BEAM' in h.columns.names})   
+
         return beams
-        
+    elif params["beams"].endswith(".fits"):
+        return PowerSpectra.load_from_fits(params["beams"])   
     else:
-        params = read_Mspec_ini(params)
-        regex=re.compile(params.get("map_regex",def_map_regex))
+        regex=re.compile(params.get("beam_regex",params.get("map_regex",def_map_regex)))
         files = [(os.path.join(params["beams"],f),[MapID(m.group(1),'T',m.group(2)) for m in regex.finditer(f)]) for f in os.listdir(params["beams"])]
         beams = SymmetricTensorDict(rank=2)
         
-        beampow = {'bl':2,'wl':1}[params.get("beam_format","bl")] 
+
         
         for (f,m) in files:
             if len(m)==1: beams[(m[0],m[0])] = load_multi(f)[:int(params["lmax"]),params.get("beam_col",1)]**beampow
@@ -748,7 +762,9 @@ def load_beams(params):
                 beams[(m1,m2)] = sqrt(beams[(m1,m1)]*beams[(m2,m2)])
     
         return PowerSpectra(beams)
+    
         
+    
         
 def load_subpix(params, col=5):
     """Load the subpixel contribution from the beam files"""
