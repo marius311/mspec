@@ -21,13 +21,12 @@ if __name__=="__main__":
     params = read_Mspec_ini(sys.argv[1:])
     lmax = params["lmax"]
     bin = params["binning"]
-    ells = arange(lmax)
-    todl = ells*(ells+1)/2/pi
+
     
     # Load stuff
     if (is_mpi_master()): print "Loading pseudo-cl's, beams, and noise..."
     pcls = load_pcls(params)
-    beam = load_beams(params) if params.get("beams",None) else defaultdict(lambda: 1)
+    beam = load_beams(params) 
     noise = load_noise(params) if params.get("noise",None) else defaultdict(lambda: 0)
     subpix = load_subpix(params) if params.get("subpix",None) else defaultdict(lambda: 0)
     
@@ -52,17 +51,23 @@ if __name__=="__main__":
     if (params.get("mask")):
         if (is_mpi_master()): print "Loading mode coupling matrices..."
         imll = load_multi(params["mask"]+".imll")
-        assert alen(imll)>=lmax, "The mode-coupling matrix has not been calculated to high enough lmax. Please run mask_to_mll.py again."
-        imll = imll[:lmax,:lmax]
-        if str2bool(params.get("get_covariance",False)): gll2 = load_multi(params["mask"]+".mll2")[:lmax,:lmax]/(2*arange(lmax)+1)
+        if str2bool(params.get("get_covariance",False)): gll2 = load_multi(params["mask"]+".mll2")/(2*arange(imll.shape[0])+1)
+        else: gll2 = None
     else:
         imll=1
         gll2=diag(1./(2*arange(lmax)+1))
 
-#    if params.get('deconv_pixwin',True): 
-#        import healpy as H
-#        for (a,b) in pairs(maps): pcls[(a,b)]/=H.pixwin(2048)[:lmax]**2
-    
+    # Check lmax
+    lmax_union = min([imll.shape[0],min(min(b.shape[0] for b in ps.spectra.values()) for ps in [beam,pcls,noise,subpix] if isinstance(ps,PowerSpectra))])
+    if lmax_union < lmax and is_mpi_master(): print "Warning: Lowering lmax from %i to %i because of insufficient data."%(lmax,lmax_union)
+    lmax = lmax_union
+    for ps in ['beam','pcls','noise','subpix']:
+        exec("if isinstance(%s,PowerSpectra): %s = %s.sliced(0,lmax)"%((ps,)*3))
+    imll = imll[:lmax,:lmax]
+    if gll2 is not None: gll2 = gll2[:lmax,:lmax]
+    ells = arange(lmax)
+    todl = ells*(ells+1)/2/pi
+
     #Equation (4), the per detector signal estimate
     if (is_mpi_master()): print "Calculating per-detector signal..."
     hat_cls_det = PowerSpectra(ells=bin(ells))
