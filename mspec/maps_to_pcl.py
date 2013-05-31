@@ -55,13 +55,13 @@ if __name__=="__main__":
             if params.get('subtract_mean',False): mp -= (sum(mask*mp)/sum(mask))
             mp*=mask
         det.insert(1,"T")
-        return (file,det,H.map2alm(mp,lmax=lmax))
+        return H.map2alm(mp,lmax=lmax)
 
-    alms = mpi_map(maps2alm,maps)            
-    #alms = mpi_map(maps2alm,maps,distribute=True)    
+    #Compute the alms (with MPI)
+    alms = zip(maps,mpi_map_array(maps2alm,maps,shape=((lmax+1)*(lmax+2)/2,)))
     
     # Figure out all the powerspectra we need to compute and their output file names
-    almpairs = [(alm1,alm2,os.path.join(params["pcls"],"-".join(d1)+'__'+"-".join(d2))) for ((m1,d1,alm1),(m2,d2,alm2)) in pairs(alms)]
+    almpairs = [(alm1,alm2,os.path.join(params["pcls"],"-".join(d1)+'__'+"-".join(d2))) for (((m1,d1),alm1),((m2,d2),alm2)) in pairs(alms)]
     
     def almpair2ps((alm1,alm2,output)):
         print "Process "+str(get_mpi_rank())+" is calculating '"+output+"'"

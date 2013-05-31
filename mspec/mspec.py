@@ -566,13 +566,16 @@ def get_bin_func(binstr,q=None):
             else:
                 if axis==0 or axis is None and x.ndim==1: 
                     nl = min(nq,x.shape[0])
-                    return dot(q[:,:nl],x[:nl])
+                    nqp = slice_bins(lmins, lmaxs=lmaxs, lslice=slice(0,nl))
+                    return dot(q[nqp,:nl],x[:nl])
                 elif axis==1: 
                     nl = min(nq,x.shape[1])
-                    return dot(x[...,:nl],q[:,:nl].T)
+                    nqp = slice_bins(lmins, lmaxs=lmaxs, lslice=slice(0,nl))
+                    return dot(x[...,:nl],q[nqp,:nl].T)
                 elif axis is None:
                     nl = min(nq,x.shape[0])
-                    return dot(dot(q[:,:nl],x[:nl,:nl]),q[:,:nl].T)
+                    nqp = slice_bins(lmins, lmaxs=lmaxs, lslice=slice(0,nl))
+                    return dot(dot(q[nqp,:nl],x[:nl,:nl]),q[nqp,:nl].T)
                 
         q_bin.q = q
         q_bin.lmaxs = lmaxs
@@ -590,7 +593,7 @@ def get_bin_func(binstr,q=None):
         return get_q_bin(q)
     
     if binstr=='c2':
-        return get_q_bin(loadtxt(os.path.join(Mrootdir,"dat/c2_binning")))
+        return get_q_bin(np.load(os.path.join(Mrootdir,"dat/c2_binning.npy")))
     
     if binstr=="ctp":
         ctpbins=loadtxt(os.path.join(Mrootdir,"dat/CTP_bin_TT_orig"),dtype=int)
