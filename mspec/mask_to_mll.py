@@ -8,17 +8,15 @@ from mll import mll
 from utils import *
 from numpy.linalg import inv
 
-
-if __name__=="__main__":
+def mask_to_mll(params):
     #Read in parameter file and get output names
-    params = read_Mspec_ini(sys.argv[1:])
-    print "Getting mode coupling for '"+params["mask"]+"'"
+    print "Getting mode coupling for '"+params.mask+"'"
     
     #Create the healpix mask
-    mask = H.read_map(params["mask"])
+    mask = H.read_map(params.mask)
     
     #Read in other parameters
-    lmax = int(params["lmax"])+2
+    lmax = int(params.lmax)+2
     wlmax = min(2*lmax+1,3*H.npix2nside(alen(mask))-1)
     
     print "Getting mask powerspectrum..."
@@ -38,5 +36,5 @@ if __name__=="__main__":
     
     #Save results
     for (post,mat) in [("mll",m),("imll",im),("mll2",m2),("imll2",im2)]: 
-        save_multi(params["mask"]+"."+post,mat)
-        print "Saved '"+params["mask"]+"."+post+"'"
+        save_multi(params.mask+"."+post,mat)
+        print "Saved '"+params.mask+"."+post+"'"

@@ -1,45 +1,13 @@
 from ast import literal_eval
 from bisect import bisect_right, bisect_left
 from collections import namedtuple, defaultdict
-from itertools import takewhile
+from itertools import takewhile, chain
 from numpy import *
 from numpy.linalg import norm
 from scipy.optimize import fmin
 from utils import *
 import sys, os, re, gc
-
-__all__ = ['MapID', 
-           'SymmetricTensorDict',
-           'PowerSpectra', 
-           'alm2cl', 
-           'skycut_mask',
-           'get_bin_func', 
-           'load_signal', 
-           'load_pcls', 
-           'load_clean_calib_signal', 
-           'load_beams', 
-           'read_Mspec_ini',
-           'cmb_orient',
-           'load_chain',
-           'init_chain_params',
-           'fid_cmb',
-           'load_subpix',
-           'get_optimal_weights',
-           'get_pcl_noise',
-           'def_map_regex',
-           'inpaint']
-
-MapID = namedtuple("MapID", ["fr","type","id"])
-MapID.__str__ = MapID.__repr__ = lambda self: "-".join(self)  
-
-
-def_map_regex = "(100|143|217|353).*?([0-9][abc]?)"
-
-"""
-If relative_path=True when calling read_Mspec_ini, these parameters are
-expanded into absolute path names relative to the parameter file.
-"""
-def_file_params = ['maps','pcls','signal','beams','mask','pico_datafile','chain']
+import os.path as osp
 
 
 class SymmetricTensorDict(dict):
@@ -459,77 +427,27 @@ class PowerSpectra(object):
         return PowerSpectra(spectra,cov,ells[0],binning=ps[0].binning)
 
 
+class MDict(object):
+    def __init__(self,**kwargs):
+        self.__dict__.update(kwargs)
 
-def read_Mspec_ini(params,relative_paths=True):
+def read_ini(params):
     """
     Read and process an mspec ini file, returning a dictionary.
     
     Keyword arguments:
     params -- A string filename, or a dictionary for an already loaded file.
-    relative_path -- If True and params is a filename, certain values which are 
-                     relative paths are turned into absolute paths relative 
-                     to the parameter file itself. (default=True)
     """
     
-    if type(params)!=list: params=[params]
-    mp = {}
+    import imp
 
-    for param in params:
-        if type(param)==str:
-            p = read_ini(param)
-            for (k,v) in p.items():
-                if (type(v)==str):
-                    try: 
-                        pv = literal_eval(v)
-                        if isinstance(pv, list): pv = array(pv)
-                    except: pv = try_type(v)
-                if relative_paths and type(pv)==str and not os.path.isabs(pv):
-                    if k in def_file_params:
-                        pv = os.path.abspath(os.path.join(os.path.dirname(param),pv))
-                    elif os.path.exists(pv):
-                        pv = os.path.abspath(pv)
-                    else:
-                        rel = os.path.abspath(os.path.join(os.path.dirname(param),pv))
-                        if os.path.exists(rel): pv = rel
-                mp[k]=pv
-        else:
-            mp.update(param)
-    
-    if 'binning' not in mp or type(mp['binning'])==str: mp["binning"]=get_bin_func(mp.get("binning","none"))
-    return mp
-
-
-
-def alm2cl(alm1,alm2):
-    """
-    Compute the cross power-spectrum given two alms computed with map2alm
-    Assumes these are alm's from a real map so that a_lm = -conjugate(a_l(-m))
-    """
-    import healpy as H
-    (lmax1,lmax2) = [H.Alm.getlmax(alen(a)) for a in [alm1,alm2]]
-    lmax = min(lmax1,lmax2)
-    return array(real([(alm1[l]*alm2[l]+2*real(vdot(alm1[H.Alm.getidx(lmax1,l,arange(1,l+1))],alm2[H.Alm.getidx(lmax2,l,arange(1,l+1))])))/(2*l+1) for l in range(lmax)]))
-
-def skycut_mask(nside,percent,dth=deg2rad(10),apod_fn=lambda x: cos(pi*(x-1)/4)**2):
-    """
-    Returns an ring-scheme healpix mask with a given percent of the sphere 
-    masked out around the galactic plane.
-    
-    Keyword arguments:
-    
-    nside -- The nside of the mask
-    percent -- How much of the sky to mask
-    dth -- The number of radians of apodization (default = 10 degrees)
-    apod_fn -- The apodization function (default = Hann window)
-    """
-    import healpy as H
-    mask = ones(12*nside**2)
-    thcut = arcsin(percent)
-    for iz in range(4*nside+1):
-        th = arcsin(H.ring2z(nside,iz))
-        mask[H.in_ring(nside,iz,0,pi)] = 0 if abs(th)<thcut-dth/2 else 1 if abs(th)>thcut+dth/2 else apod_fn((abs(th)-thcut)/dth)
-
-    return mask
+    try:
+        mymod = imp.new_module('params1')   
+        code=open(params).read()
+        exec code in mymod.__dict__
+        return MDict(**{k:v for k,v in mymod.__dict__.items() if not k.startswith('_')})
+    except Exception as e:
+        raise e
 
 
 def get_bin_func(binstr,q=None):
@@ -612,57 +530,11 @@ def get_bin_func(binstr,q=None):
     raise ValueError("Unknown binning function '"+binstr+"'")
 
 
-def get_pcl_noise(pcl, freqs=None, bootstrap_weights=None):
-    """
-    To compute noise levels we look at auto minus average-of-cross-spectra.
-    The `bootstrap_weights` come in when computing this average. The default
-    is equal weights, but one can imagine iterating this function a few times
-    (althought its probably totally unnecessary).
-    """
-    maps = pcl.get_maps()
-    freqs = freqs or set(m.fr for m in maps)
-    if bootstrap_weights is None: bootstrap_weights=defaultdict(lambda: 1)
-
-    pcl_sig = PowerSpectra(ells=pcl.ells,binning=pcl.binning)
-    for (alpha,beta) in pairs(freqs):
-        pcl_sig[(alpha,beta)] = sum(
-                pcl[(a,b)]*bootstrap_weights[a,b]
-                for (a,b) in pairs(maps) if (a.fr,b.fr) in [(alpha,beta),(beta,alpha)] and a!=b
-            )/sum(
-                bootstrap_weights[a,b]
-                for (a,b) in pairs(maps) if (a.fr,b.fr) in [(alpha,beta),(beta,alpha)] and a!=b
-            )
-
-    pcl_nl = {m:(pcl[m,m] - pcl_sig[m.fr,m.fr]) for m in maps if m.fr in freqs}
-
-    return pcl_nl
 
 
 
-def get_optimal_weights(pcl, freqs=None, bootstrap_weights=None, noise_range=(1500,2500)):
-    """
-    Gets the inverse variance weighting of cross spectra given noise 
-    levels computed from the given pseudo-Cl's
-    
-    To compute noise levels we look at auto minus average-of-cross-spectra.
-    The `bootstrap_weights` come in when computing this average. The default
-    is equal weights, but one can imagine iterating this function a few times
-    (althought its probably totally unnecessary).
 
-    The returned dictionary is symmetric for convenience only. One should
-    not sum over all power spectra.
-    """
-    freqs = freqs or set(m.fr for m in pcl.get_maps())   
 
-    pcl_nl = {m:mean(nl[slice(*noise_range)]) for m,nl in get_pcl_noise(pcl,freqs,bootstrap_weights).items()}
-   
-    all_weights = {}
-    for (alpha,beta) in pairs(freqs):
-        weights = {(a,b):0 if a==b else 1/pcl_nl[a]/pcl_nl[b] for a,b in pcl.get_spectra() if (a.fr,b.fr) in [(alpha,beta),(beta,alpha)]}
-        weights_normed = {k:v/sum(weights.values()) for k,v in weights.items()}
-        all_weights.update(weights_normed)
-        
-    return SymmetricTensorDict(all_weights,rank=2)
 
 
 
@@ -676,61 +548,6 @@ def clean_signal(sig,clean,weight=1,range=slice(0,-1)):
     return {m: [(m,1),
                 (clean,fmin(lambda x: sum(weight[range]*(sigu[(m,m)][range]-2*x*sigu[(m,clean)][range]+x**2*sigu[(clean,clean)][range]))/(1-2*x+x**2),.05,disp=False)[0])] 
             for m in set(sig.get_maps())-set([clean])}  
-
-def load_signal(signal, clean=False, calib=False, calibrange=slice(150,500), loadcov=True):
-    """
-    Loads the signal computed by pcl_to_signal.py
-    
-    Keyword arguments:
-    signal -- The parameter file
-    clean -- Whether to apply cleaning (default=False)
-    calib --Whether to do inter-frequency calibration (default=False)
-    calibrange -- A slice object corresponding to the range of ells over which
-                  to do the calibration (default=slice(150,500))
-    loadcov -- Whether to load the covariance (default=True)
-    """
-
-    if not isinstance(signal,(str,dict)):
-        raise ValueError("Unrecognizable type for signal, '%s'"%type(signal))
-    
-    fileroot = signal if isinstance(signal,str) else signal['signal']
-    
-    if fileroot.endswith('.fits'):
-        return PowerSpectra.load_from_fits(fileroot)
-    else:
-        params = read_Mspec_ini(signal)
-        bin = params['binning']
-        ells, spectra = load_multi(params["signal"]+"_spec").T
-        cov = None
-        if loadcov and str2bool(params.get("get_covariance",True)):
-            try: cov = load_multi(params["signal"]+"_cov")
-            except IOError: pass
-        return PowerSpectra(spectra, cov, maps=params.get("freqs"),binning=params["binning"])
-
-
-def load_clean_calib_signal(params, calibrange=slice(150,500), loadcov=True):
-    """
-    Loads the cleaned and calibrated signal computed by pcl_to_signal.py
-    
-    Keyword arguments:
-    params -- The parameter file
-    calibrange -- A slice object corresponding to the range of ells over which
-                  to do the calibration (default=slice(150,500))
-    loadcov -- Whether to load the covariance (default=True)
-    """
-
-    return load_signal(params, True, True, calibrange, loadcov)
-
-def load_chain(params):
-    params = read_Mspec_ini(params)
-    return mcmc.load_chain(params["file_root"])
-
-def load_pcls(params):
-    """Load the pcls computed by maps_to_pcls.py"""
-    params = read_Mspec_ini(params)
-    regex=re.compile(params.get("pcl_regex",params.get("map_regex",def_map_regex)))
-    files = [(os.path.join(params["pcls"],f),[MapID(m.group(1),'T',m.group(2).lower()) for m in regex.finditer(f)]) for f in os.listdir(params["pcls"])]
-    return PowerSpectra({tuple(m):load_multi(f) for (f,m) in files if len(m)==2})
 
 
 def load_beams(params,slice_lmax=False):
@@ -765,73 +582,69 @@ def load_beams(params,slice_lmax=False):
                 beams[(m1,m2)] = sqrt(beams[(m1,m1)]*beams[(m2,m2)])
     
         return PowerSpectra(beams)
-    
-        
-    
-        
-def load_subpix(params, col=5):
-    """Load the subpixel contribution from the beam files"""
-    params = read_Mspec_ini(params)
-    regex = re.compile(params.get("map_regex",def_map_regex))
-    files = [(os.path.join(params["beams"],f),[MapID(m.group(1),'T',m.group(2)) for m in regex.finditer(f)]) for f in os.listdir(params["beams"])]
-    beams = SymmetricTensorDict(rank=2)
-    
-    for (f,m) in files:
-        if len(m)==1: beams[(m[0],m[0])] = load_multi(f)[:int(params["lmax"]),params.get("subpix_col",col)]
-        elif len(m)==2: beams[(m[0],m[1])] = load_multi(f)[:int(params["lmax"]),params.get("subpix_col",col)]
-        
-    for (m1,m2) in pairs(beams.get_index_values()):
-        if (m1,m2) not in beams: 
-            beams[(m1,m2)] = sqrt(beams[(m1,m1)]*beams[(m2,m2)])
-    
-    return PowerSpectra(beams)
 
-def inpaint(m,num_degrades=1,nside_in=2048):
-    """
-    Inpaints missing pixels by degrading the map (while ignoring missing pixels),
-    then setting the missing values correpsonding to their value in the degraded map. 
-    """
-    import healpy as H
-    nside_deg = nside_in/(2**num_degrades)
-    badpix = arange(12*nside_in**2)[m==H.UNSEEN]
-    badpix_deg = H.nest2ring(nside_deg,H.ring2nest(nside_in,badpix) >> 2*num_degrades)
-    m_deg = H.ud_grade(m,nside_deg)
-    m2=m.copy()
-    m2[badpix]=m_deg[badpix_deg]
-    return m2
-      
-        
-def load_noise(params):
-    """Load the noise"""
-    params = read_Mspec_ini(params)
-    regex=re.compile(params.get("map_regex",def_map_regex))
-    files = [(os.path.join(params["noise"],f),regex.search(f)) for f in os.listdir(params["noise"])]
-    return dict([(MapID(r.group(1),'T',r.group(2)),load_multi(f)[:int(params["lmax"]),params.get("noise_col",1)]) for (f,r) in files if r!=None])
-       
-def init_chain_params(params):
-    """
-    Loads a parameter file and returns a set of parameters preprocessed
-    in the same way they are during an MCMC chain, so that you can call
-    the functions from M.sig on them.
-    """
-    params = read_Mspec_ini(params)
-    sig.init(params)
-    params=mcmc.get_mcmc_params(params)
-    params.add_derived(sig.camb_derived)
-    return params
+    
+def load_pcls(pcls,lmax=None):
+    return PowerSpectra({k:loadtxt(v,usecols=[-1])[slice(0,lmax)] for k,v in scan_pcls(pcls).items()})
 
-def fid_cmb(lmax):
-    """Returns the WMAP7 LCDM best fit cosmology"""
-    import pypico
-    return pypico.camb(lmax,ns=.963,As=2.43e-9,omegab=.0226/.7**2,omegac=.111/.71**2,omegav=1-.0226/.71**2-.111/.71**2,H0=71,tau=.088,DoLensing=True)
+def scan_pcls(pcls):
+    return {k:v for k,v in scan_files(pcls,"(.*)__X__(.*)",transform=lambda x: tuple(tuple(xx.split('-')) for xx in x)).items() if not v.endswith("log")}
 
-def cmb_orient(wmap=True,spt=True):
-    """Plot up WMAP and SPT data points"""
-    from matplotlib.pyplot import plot, errorbar, contour, yscale as ppyscale, xscale as ppxscale
-    from matplotlib.mlab import movavg
-    if (wmap):
-        wmap = loadtxt(os.path.join(Mrootdir,"dat/wmap_binned_tt_spectrum_7yr_v4p1.txt"))
-        errorbar(wmap[:,0],wmap[:,3],yerr=wmap[:,4],fmt='.',label='WMAP7')
-    if (spt):
-        spt = loadtxt(os.path.join(Mrootdir,"dat//dl_spt20082009.txt"))
-        errorbar(spt[:,0],spt[:,1],yerr=spt[:,2],fmt='.',label='SPT K11')
+def scan_files(folder,regex,transform=None,multiple_search=False):
+    if transform is None: transform=lambda x: x
+    if isinstance(regex,str): regex=re.compile(regex)
+    files = [(osp.join(folder,f),[transform(r.groups()) for r in regex.finditer(f)]) for f in os.listdir(folder)]
+    if multiple_search:
+        return {tuple(k):f for f,k in files if len(k)>0}
+    else: 
+        return {tuple(k[0]):f for f,k in files if len(k)>0}
+
+
+class load_files(dict):
+    def __init__(self,files,column=None,loadfn=None):
+        super(load_files,self).__init__(files)
+        self.loadfn = loadfn
+        if column is not None: self.loadfn = lambda x: loadtxt(x,usecols=[1])
+
+    def load(self):
+        return {k:self.loadfn(v) for k,v in self.items()}
+
+
+def equal_cross_weights(pcls):
+    """
+    Return a equal weighting of cross spectra of the detector maps in pcls 
+    """
+    fks = set((k1[0],k2[0]) for k1,k2 in pcls.spectra)
+    weights = {(alpha,beta):{tuple(sorted((a,b))):1 for a,b in pcls.spectra if a!=b and a[0]==alpha and b[0]==beta} for alpha,beta in fks}
+    return get_normed_weights(weights)
+
+
+def get_pcl_noise(weights, pcls):
+    """
+    Use the given weights to construct a signal estimate from the pcls, 
+    then do auto-minus-cross to give the noise estimate for each detector auto-spectrum.
+    """
+    pcl_sig = PowerSpectra({fpk:sum(pcls[dpk]*dpw for dpk,dpw in fpw.items()) for fpk,fpw in weights.items()})
+    detmaps = set(chain(*[chain(*fpw.keys()) for fpw in weights.values()]))
+    pcl_nl = {dm:(pcls[(dm,dm)] - pcl_sig[(dm[0],dm[0])]) for dm in detmaps}
+    return pcl_nl
+
+
+def get_normed_weights(weights):
+    """
+    Normalize the weightings to 1.
+    """
+    return {fpk:{mpk:mpw/float(sum(fpw.values())) for mpk,mpw in fpw.items()} for fpk,fpw in weights.items() if len(fpw)>0}
+
+
+def optimize_weights(pcls,weights=None, noise_range=(1500,2500)):
+    """
+    Use the given weights to call get_pcl_noise and then construct an inverse variance noise weighting. 
+    """
+    if weights is None: weights = equal_cross_weights(pcls)
+
+    pcl_nl = {m:mean(nl[slice(*noise_range)]) for m,nl in get_pcl_noise(weights,pcls).items()}
+   
+    weights = {fpk:{mpk:1./pcl_nl[mpk[0]]/pcl_nl[mpk[0]] for mpk,mpw in fpw.items()} for fpk,fpw in weights.items()}
+    return get_normed_weights(weights)
+

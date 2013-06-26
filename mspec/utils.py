@@ -143,41 +143,6 @@ def str2bool(s):
     elif s.lower() in ["f","false"]: return False
     else: raise ValueError("Couldn't convert '"+str(s)+"' to boolean.")
 
-def read_ini(file):
-    """
-    Read a parameter file and return it in the form of a dictionary of string key-value pairs.
-    All lines must be empty or "key = value"
-    Comments are denoted by #
-    Keys can't start with $ or *
-    """
-    
-    class ini_dict(dict):
-        """Override the dictionary class to provide more meaningful error messages"""
-        def key_error(self,key):
-            return KeyError("Could not find the key '"+key+"' in the ini file '"+file+"'")
-            
-        def get(self, key, default=None):
-            if self.has_key(key): return self[key]
-            else: return default
-            
-        def __getitem__(self, key):
-            try: return dict.__getitem__(self, key)
-            except: raise self.key_error(key)
-        
-    params = ini_dict()
-    
-    with open(file) as f: lines=[l for l in [re.sub("#.*","",l).strip() for l in f.readlines()] if len(l)>0]
-    for line in lines:
-        tokens = [t.strip() for t in line.split("=")]
-        if (len(tokens)!=2):
-            raise SyntaxError("Error parsing "+file+". Expected one \"=\" in line '"+line+"'")
-        elif (tokens[0][0] in ["$","*"]):
-            raise SyntaxError("Error parsing "+file+". Key can't start with "+tokens[0][0]+". '"+line+"'")
-        elif tokens[1]!='':
-            params[tokens[0]] = tokens[1]
-
-    return params
-
 
 def cust_legend(opts,labels,**kwargs):
     """A custom legend"""
