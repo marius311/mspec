@@ -1,6 +1,6 @@
 from ast import literal_eval
 from bisect import bisect_right, bisect_left
-from collections import namedtuple, defaultdict
+from collections import namedtuple, defaultdict, OrderedDict
 from itertools import takewhile, chain
 from numpy import *
 from numpy.linalg import norm
@@ -151,7 +151,7 @@ class PowerSpectra(object):
         """Gets keys for all cross spectra"""
         return set(self.get_spectra()) - set(self.get_auto_spectra())
 
-    def get_as_matrix(self, lrange=None, ell_blocks=False):
+    def get_as_matrix(self, lrange, ell_blocks=False, get_cov=True):
         """
         Gets the spectra as a single block vector and the covariances as
         a single block matrix. The return value has fields 'spec' and 'cov. 
@@ -163,16 +163,19 @@ class PowerSpectra(object):
                       block corresponds to the same spectrum. (default=False)
         """
         cov_mat=None
-        if lrange is None: lrange = {}
-        for k in self.get_spectra(): lrange.setdefault(k,[None])
-        slices = {k:self.binning(slice(*lrange[k])) for k in self.get_spectra()}            
+#        if lrange is None: lrange = {}
+#        for k in self.get_spectra(): lrange.setdefault(k,[None])
+        lrange = OrderedDict([(k,self.binning(slice(*v))) for k,v in lrange.items()])            
         if ell_blocks:
             raise NotImplementedError("Functionality temporarily removed.")
         else:
-            spec_mat = vstack(vstack([self.ells,self.spectra[(alpha,beta)]])[:,slices[(alpha,beta)]].T for (alpha,beta) in pairs(self.get_maps()))
-            if (self.cov): 
-                cov_mat = vstack(map(hstack,[[self.cov[(p1,p2)][slices[p1],slices[p2]] for p2 in self.get_spectra()] for p1 in self.get_spectra()]))
+            spec_mat = hstack(self.spectra[k][v] for k,v in lrange.items())
+            if (get_cov and self.cov): 
+                cov_mat = vstack(map(hstack,[[self.cov[(k1,k2)][v1,v2] 
+                                              for k2,v2 in lrange.items()] for k1,v1 in lrange.items()]))
         return namedtuple("SpecCov", ['spec','cov'])(spec_mat,cov_mat)
+
+
 
     def save_as_matrix(self,fileroot):
         """Save the matrix representation of this PowerSpectra to file"""
@@ -262,13 +265,11 @@ class PowerSpectra(object):
                     For example, {'217c': [('217',1),('353',-.14)], '143c': [('143',1),('353',-.038)]}
         normalize -- Whether to normalize the sum of the weights to 1 (i.e. keep the CMB constant)
         """
-        if isinstance(new_maps,dict): new_maps = new_maps.items()
-        
         spectra = SymmetricTensorDict([
               ((alpha2,beta2),
-               sum(self.spectra[(alpha,beta)]*fa*fb for (alpha,fa) in coeff_a for (beta,fb) in coeff_b) 
-               /(sum(fa*fb for (_,fa) in coeff_a for (_,fb) in coeff_b) if normalize else 1))
-              for ((alpha2,coeff_a),(beta2,coeff_b)) in pairs(new_maps)
+               sum(self.spectra[(alpha,beta)]*fa*fb for (alpha,fa) in coeff_a.items() for (beta,fb) in coeff_b.items()) 
+               /(sum(fa*fb for fa in coeff_a.values() for fb in coeff_b.values()) if normalize else 1))
+              for ((alpha2,coeff_a),(beta2,coeff_b)) in pairs(new_maps.items())
           ],rank=2)
         
         if self.cov:
@@ -276,12 +277,12 @@ class PowerSpectra(object):
                   (((alpha2,beta2),(gamma2,delta2)),
                    sum(
                        self.cov[((alpha,beta),(gamma,delta))]*fa*fb*fg*fd
-                       for (alpha,fa) in coeff_a for (beta,fb) in coeff_b for (gamma,fg) in coeff_g for (delta,fd) in coeff_d
+                       for (alpha,fa) in coeff_a.items() for (beta,fb) in coeff_b.items() for (gamma,fg) in coeff_g.items() for (delta,fd) in coeff_d.items()
                    )/(sum(
                        fa*fb*fg*fd
-                       for (alpha,fa) in coeff_a for (beta,fb) in coeff_b for (gamma,fg) in coeff_g for (delta,fd) in coeff_d
+                       for fa in coeff_a.values() for fb in coeff_b.values() for fg in coeff_g.values() for fd in coeff_d.values()
                    ) if normalize else 1))
-                  for (((alpha2,coeff_a),(beta2,coeff_b)),((gamma2,coeff_g),(delta2,coeff_d))) in pairs(pairs(new_maps))
+                  for (((alpha2,coeff_a),(beta2,coeff_b)),((gamma2,coeff_g),(delta2,coeff_d))) in pairs(pairs(new_maps.items()))
               ],rank=4)
             
         else:
