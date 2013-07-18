@@ -18,48 +18,49 @@ import healpy as H
 
 
 
-def pcl_to_signal(lmax,
-                  bin,
-                  pcls,
-                  beams,
-                  weights,
-                  fidcmb,
-                  signal,
-                  mask=None,
-                  detsignal=None,
-                  get_covariance=False,
-                  **kwargs):
+def get_signal(lmax,
+               bin,
+               pcls,
+               beams,
+               weights,
+               fidcmb,
+               signal,
+               kernels,
+               masks=None,
+               detsignal=None,
+               get_covariance=False,
+               mask_name_transform=default_mask_name_transform,
+               **kwargs):
     """
     """
   
 
     # Load stuff
-    if (is_mpi_master()): print "Loading pseudo-cl's, beams, and noise..."
+    if (is_mpi_master()): print "Loading pseudo-cl's..."
     pcls = load_pcls(pcls).sliced(lmax).rescaled(1e12)
+
+    if (is_mpi_master()): print "Loading beams..."
     beams = PowerSpectra(beams.load()).sliced(lmax)
+
     noise = defaultdict(lambda: 0)
     subpix = defaultdict(lambda: 0)
     calib = defaultdict(lambda: 1)
 
     if callable(weights): weights=weights(pcls)
 
-    # Load mode coupling matrices
-    if mask is not None:
-        if (is_mpi_master()): print "Loading mode coupling matrices..."
-        imll = load_multi(mask+".imll")
-        if get_covariance: gll2 = load_multi(mask+".mll2")/(2*arange(imll.shape[0])+1)
-        else: gll2 = None
-    else:
-        imll=1
-        gll2=diag(1./(2*arange(lmax)+1))
+    ps=list(chain(*[v.keys() for v in weights.values()]))
 
-    # Check lmax
-    #lmax_union = min([imll.shape[0],min(min(b.shape[0] for b in ps.spectra.values()) for ps in [beam,pcls,noise,subpix] if isinstance(ps,PowerSpectra))])
-    #if lmax_union < lmax and is_mpi_master(): print "Warning: Lowering lmax from %i to %i because of insufficient data."%(lmax,lmax_union)
-    #for ps in ['beam','pcls','noise','subpix']:
-    #    exec("if isinstance(%s,PowerSpectra): %s = %s.sliced(0,lmax)"%((ps,)*3))
-    imll = imll[:lmax,:lmax]
-    if gll2 is not None: gll2 = gll2[:lmax,:lmax]
+    # Load mode coupling matrices
+    if get_covariance:
+        if (is_mpi_master()): print "Loading kernels..."
+        imlls, glls = load_kernels(kernels,lmax=lmax)
+        tmasks = {k:mask_name_transform(v) for k,v in masks.items()}        
+        imlls = SymmetricTensorDict({(dm1,dm2):imlls[tmasks[dm1],tmasks[dm2]] 
+                                     for dm1,dm2 in ps})
+        glls = SymmetricTensorDict({((dm1,dm2),(dm3,dm4)):glls[(tmasks[dm1],tmasks[dm2]),(tmasks[dm3],tmasks[dm4])] 
+                                    for (dm1,dm2),(dm3,dm4) in pairs(ps)})
+
+    
     ells = arange(lmax)
     todl = ells*(ells+1)/2/pi
 
@@ -97,17 +98,15 @@ def pcl_to_signal(lmax,
 
         if (is_mpi_master()): print "Calculating detector covariance..."
         
-
         def entry(((a,b),(c,d))):
             print "Calculating the %s entry."%(((a,b),(c,d)),)
             # Equation (5)
-            pclcov = (lambda x: x+x.T)(outer(fid_cls[(a,c)],fid_cls[(b,d)]) + outer(fid_cls[(a,d)],fid_cls[(b,c)]))*gll2/2
+            pclcov = (lambda x: x+x.T)(outer(fid_cls[(a,c)],fid_cls[(b,d)]) + outer(fid_cls[(a,d)],fid_cls[(b,c)]))*glls[((a,b),(c,d))]/2
             # Equation (7)
-            entry = dot(bin(transpose([todl])*(imll/transpose([beams[(a,b)]])),axis=0),dot(pclcov,bin(transpose([todl])*(imll/transpose([beams[(c,d)]])),axis=0).T))*calib[a]*calib[b]*calib[c]*calib[d]
+            entry = dot(bin(transpose([todl])*(imlls[(a,b)]/transpose([beams[(a,b)]])),axis=0),dot(pclcov,bin(transpose([todl])*(imlls[(c,d)]/transpose([beams[(c,d)]])),axis=0).T))*calib[a]*calib[b]*calib[c]*calib[d]
             return (((a,b),(c,d)),entry)
 
-        maps=list(chain(*[v.keys() for v in weights.values()]))
-        hat_cls_det.cov=SymmetricTensorDict(mpi_map(entry,pairs(maps)),rank=4)
+        hat_cls_det.cov=SymmetricTensorDict(mpi_thread_map(entry,pairs(ps)),rank=4)
         
         # Equation (9)
         if (is_mpi_master()): 

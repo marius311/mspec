@@ -5,6 +5,7 @@ import itertools
 import traceback
 from collections import namedtuple
 from numpy.ma.core import sort
+from multiprocessing.dummy import Pool
 
 """ When loading files via load_multi, this is the default type to convert them to """
 def_dtype = float64
@@ -63,7 +64,7 @@ def mpi_consistent(value):
     if comm==None: return value
     else: return comm.bcast(value)
 
-def mpi_map(function,sequence,distribute=True):
+def mpi_map(function,sequence,mapfn=map,distribute=True):
     """
     A map function parallelized with MPI. If this program was called with mpiexec -n $NUM, 
     then partitions the sequence into $NUM blocks and each MPI process does the rank-th one.
@@ -74,20 +75,27 @@ def mpi_map(function,sequence,distribute=True):
                   otherwise only the root process does (default=True)
     """
     (rank,size,comm) = get_mpi()
-        
+
     sequence = mpi_consistent(sequence)
 
     if (size==1):
-        return map(function,sequence)
+        return mapfn(function,sequence)
     else:
         if (distribute):
-            return flatten(comm.allgather(map(function, partition(sequence,size)[rank])))
+            return flatten(comm.allgather(mapfn(function, partition(sequence,size)[rank])))
         else:
             if (rank==0):
-                return flatten(comm.gather(map(function, partition(sequence,size)[rank])))
+                return flatten(comm.gather(mapfn(function, partition(sequence,size)[rank])))
             else:
-                comm.gather(map(function, partition(sequence,size)[rank]))
+                comm.gather(mapfn(function, partition(sequence,size)[rank]))
                 return []
+
+def mpi_thread_map(function,sequence,nthreads=8):
+    """
+    Map using mpi / threads
+    """
+    return mpi_map(function,sequence,mapfn=Pool(nthreads).map)
+
 
 
 def mpi_map_array(function,sequence):

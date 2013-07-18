@@ -585,7 +585,7 @@ def load_beams(params,slice_lmax=False):
 
     
 def load_pcls(pcls,lmax=None):
-    return PowerSpectra({k:loadtxt(v,usecols=[-1])[slice(0,lmax)] for k,v in scan_pcls(pcls).items()})
+    return PowerSpectra({k:loadtxt(v,usecols=[1])[slice(0,lmax)] for k,v in scan_pcls(pcls).items()})
 
 def scan_pcls(pcls):
     return {k:v for k,v in scan_files(pcls,"(.*)__X__(.*)",transform=lambda x: tuple(tuple(xx.split('-')) for xx in x)).items() if not v.endswith("log")}
@@ -630,6 +630,12 @@ def get_pcl_noise(weights, pcls):
     return pcl_nl
 
 
+def load_kernels(kernels,lmax=None):
+    glls=scan_files(kernels,'gll__(.*).npy',transform=lambda x: (lambda y: ((y[0],y[1]),(y[3],y[4])))(x[0].split('__')))
+    imlls=scan_files(kernels,'imll__(.*).npy',transform=lambda x: (lambda y: (y[0],y[2]))(x[0].split('__')))
+    return [SymmetricTensorDict(load_files(y,loadfn=lambda x: np.load(x)[slice(lmax),slice(lmax)]).load(),rank=r) for y,r in [(imlls,2),(glls,4)]]
+
+
 def get_normed_weights(weights):
     """
     Normalize the weightings to 1.
@@ -647,4 +653,7 @@ def optimize_weights(pcls,weights=None, noise_range=(1500,2500)):
    
     weights = {fpk:{mpk:1./pcl_nl[mpk[0]]/pcl_nl[mpk[0]] for mpk,mpw in fpw.items()} for fpk,fpw in weights.items()}
     return get_normed_weights(weights)
+
+def default_mask_name_transform(m):
+    return osp.basename(m).replace('.fits','')
 
