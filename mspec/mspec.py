@@ -6,6 +6,7 @@ from numpy import *
 from numpy.linalg import norm
 from scipy.optimize import fmin
 from utils import *
+from imp import load_source
 import sys, os, re, gc
 import os.path as osp
 
@@ -428,9 +429,11 @@ class PowerSpectra(object):
         return PowerSpectra(spectra,cov,ells[0],binning=ps[0].binning)
 
 
-class MDict(object):
-    def __init__(self,**kwargs):
-        self.__dict__.update(kwargs)
+class MDict(dict):
+    def __init__(self,*args,**kwargs):
+        super(MDict, self).__init__(*args, **kwargs)
+        self.__dict__ = self
+
 
 def read_ini(params):
     """
@@ -440,15 +443,7 @@ def read_ini(params):
     params -- A string filename, or a dictionary for an already loaded file.
     """
     
-    import imp
-
-    try:
-        mymod = imp.new_module('params1')   
-        code=open(params).read()
-        exec code in mymod.__dict__
-        return MDict(**{k:v for k,v in mymod.__dict__.items() if not k.startswith('_')})
-    except Exception as e:
-        raise e
+    return MDict(**{k:v for k,v in vars(load_source('params1',params)).items() if not k.startswith('_')})
 
 
 def get_bin_func(binstr,q=None):
