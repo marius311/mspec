@@ -62,12 +62,12 @@ def get_signal(lmax,
 
     
     ells = arange(lmax)
-    todl = ells*(ells+1)/2/pi
+    todl = ells*(ells+1.)/2/pi
 
     #Equation (4), the per detector signal estimate
     if (is_mpi_master()): print "Calculating per-detector signal..."
     hat_cls_det = PowerSpectra(ells=bin(ells))
-    for (a,b) in pcls.spectra: 
+    for (a,b) in ps: 
         hat_cls_det[(a,b)] = bin(todl*(pcls[(a,b)] - (noise[a] if a==b else 0) - subpix[a,b])/beams[(a,b)])
 
     # Equation (6), the per frequency signal estimate

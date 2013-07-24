@@ -335,11 +335,11 @@ class PowerSpectra(object):
 
     def dl(self):
         """Multilies all spectra by ell(ell+1)/2/pi"""
-        return self.rescaled(self.ells**2/(2*pi))
+        return self.rescaled(self.ells*(self.ells+1)/(2*pi))
 
     def cl(self):
         """Divides all spectra by ell(ell+1)/2/pi"""
-        return self.rescaled(2*pi/self.ells**2)
+        return self.rescaled(2*pi/self.ells/(self.ells+1))
 
     def rescaled(self,fac):
         """Multiplies all spectra by a constant or ell-dependent factor"""
