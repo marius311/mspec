@@ -25,12 +25,24 @@ def get_pcls(maps,
 
     def dowork(((id1,map1),(id2,map2))):
         clfile = os.path.join(pcls,'%s__X__%s'%('-'.join(id1),'-'.join(id2)))
-        weight1, weight2 = masks.get(id1), masks.get(id2)
+        weight1, weight2 = masks.get(('T',)+id1), masks.get(('T',)+id2)
+        polweight1, polweight2 = masks.get(('P',)+id1,'YES'), masks.get(('P',)+id2,'YES')
         logfile = clfile+'.log'
-        pol = {True:'YES',False:'NO'}[do_polarization and 'Q_Stokes' in pyfits.open(map2)[1].header.values()]
+        pol = {True:'YES',False:'NO'}[do_polarization and haspol(map2)]
         print "Process %i is doing %s"%(get_mpi_rank(),clfile)
-        #cmd = "%s -mapfile %s -mapfile2 %s -weightfile %s -weightfile2 %s -polarization %s -pixelfile YES -subdipole YES -nlmax %i -clfile %s &> %s"%(spice,map1,map2,weight1,weight2,pol,lmax,clfile,logfile)
-        cmd = "%s -mapfile %s -mapfile2 %s -weightfile %s -weightfile2 %s -polarization %s -pixelfile YES -subdipole YES -nlmax %i -clfile %s"%(spice,map1,map2,weight1,weight2,pol,lmax,clfile)
+        cmd_dict = {'mapfile':map1,
+                    'mapfile2':map2,
+                    'weightfile':weight1,
+                    'weightfile2':weight2,
+                    'polarization':pol,
+                    'weightfilep':polweight1,
+                    'weightfilep2':polweight2,
+                    'pixelfile':'YES',
+                    'subdipole':'YES',
+                    'nlmax':lmax,
+                    'decouple':'YES',
+                    'clfile':clfile}
+        cmd = ' '.join([spice]+['-%s %s'%(k,v) for k,v in cmd_dict.items()])
         cmd += ' '*10000 #for some reason this solves an MPI crashing bug
         print cmd.strip()
 
@@ -48,7 +60,7 @@ def get_pcls(maps,
     tempmaps = dict(set(maps.items()) - set(polmaps.items()))
 
     work  = pairs(tempmaps.items())
-    work += [(m1,m2) for m1 in polmaps.items() for m2 in tempmaps.items()]
-    work += [(m1,m2) for m1 in polmaps.items() for m2 in polmaps.items()]
+    work += [(m1,m2) for m1 in tempmaps.items() for m2 in polmaps.items()]
+    work += [(m1,m2) for m1 in polmaps.items()  for m2 in polmaps.items()]
 
     mpi_map(dowork,work)

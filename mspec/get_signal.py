@@ -21,6 +21,7 @@ import healpy as H
 def get_signal(lmax,
                bin,
                pcls,
+               maps,
                beams,
                weights,
                fidcmb,
@@ -37,10 +38,11 @@ def get_signal(lmax,
 
     # Load stuff
     if (is_mpi_master()): print "Loading pseudo-cl's..."
-    pcls = load_pcls(pcls).sliced(lmax).rescaled(1e12)
+    pcls = load_pcls(pcls,maps=maps).sliced(lmax).rescaled(1e12)
 
     if (is_mpi_master()): print "Loading beams..."
-    beams = PowerSpectra(beams.load()).sliced(lmax)
+    if isinstance(beams,load_files): beams = PowerSpectra(beams.load()).sliced(lmax)
+    elif not isinstance(beams,PowerSpectra): raise ValueError("Beams should be load_files or PowerSpectra.")
 
     noise = defaultdict(lambda: 0)
     subpix = defaultdict(lambda: 0)
@@ -48,21 +50,35 @@ def get_signal(lmax,
 
     if callable(weights): weights=weights(pcls)
 
-    ps=list(chain(*[v.keys() for v in weights.values()]))
+    ps=set(chain(*[v.keys() for v in weights.values()]))
+    ds=set(chain(*ps))
+
 
     # Load mode coupling matrices
     if get_covariance:
         if (is_mpi_master()): print "Loading kernels..."
         imlls, glls = load_kernels(kernels,lmax=lmax)
-        tmasks = {k:mask_name_transform(v) for k,v in masks.items()}        
-        imlls = SymmetricTensorDict({(dm1,dm2):imlls[tmasks[dm1],tmasks[dm2]] 
-                                     for dm1,dm2 in ps})
-        glls = SymmetricTensorDict({((dm1,dm2),(dm3,dm4)):glls[(tmasks[dm1],tmasks[dm2]),(tmasks[dm3],tmasks[dm4])] 
-                                    for (dm1,dm2),(dm3,dm4) in pairs(ps)})
+        tmasks = {((x,)+k[1:]):mask_name_transform(v) for k,v in masks.items() for x in (['T'] if k[0]=='T' else ['E','B'])}
 
-    
+        imlls = {(dm1,dm2):SymmetricTensorDict(imlls[tmasks[dm1],tmasks[dm2]],rank=4) for dm1,dm2 in ps}
+        
+        tgll_keys = ['TT','EE','BB','TE','EB','TB']
+
+                        # TT     EE     BB     TE     EB     TB 
+        tgll_entries = [['TTTT','TETE','TTTT','TTTT','TETE','TTTT'], #TT
+                        ['TETE','EEEE','EEBB','EEEE','EEEE','EEBB'], #EE
+                        ['TTTT','BBEE','EEEE','EEEE','EEEE','EEBB'], #BB
+                        ['TTTT','EEEE','EEEE','TTTT','EEEE','TTTT'], #TE
+                        ['TETE','EEEE','EEEE','EEEE','EBEB','EEEE'], #EB
+                        ['TTTT','BBEE','BBEE','TTTT','EEEE','TTTT']] #TB
+        tgll_dict = SymmetricTensorDict({(tuple(ki),tuple(kj)):(lambda x: (x[:2],x[2:]))(tgll_entries[i][j])
+                                         for i,ki in enumerate(tgll_keys) 
+                                         for j,kj in enumerate(tgll_keys)},rank=4)
+        tglls = SymmetricTensorDict({((dm1,dm2),(dm3,dm4)):glls[(tmasks[dm1],tmasks[dm2]),(tmasks[dm3],tmasks[dm4])][tgll_dict[(dm1[0],dm2[0]),(dm3[0],dm4[0])]]
+                                     for (dm1,dm2),(dm3,dm4) in pairs(pairs(ds))},rank=4)
+
     ells = arange(lmax)
-    todl = ells*(ells+1.)/2/pi
+    todl = ells*(ells+1)/2./pi
 
     #Equation (4), the per detector signal estimate
     if (is_mpi_master()): print "Calculating per-detector signal..."
@@ -76,43 +92,48 @@ def get_signal(lmax,
     for fk in weights:
         hat_cls_freq[fk] = sum(hat_cls_det[mk]*w for mk,w in weights[fk].items())
     
-    # The fiducial model for the mask deconvolved Cl's which gets used in the covariance
     if get_covariance:
-        if (is_mpi_master()): print "Calculating fiducial signal..."
-
-        fidcmb=loadtxt(fidcmb)[:lmax]
-        fidcmb[1:]/=(arange(1,lmax)*(arange(1,lmax)+1)/2/pi)
-
-        def fidize(x,(tl,tu)=(200,500),window_len=200):
-            x=smooth(x,window_len=window_len)
-            x[tl:tu]*=sin(pi*arange(tu-tl)/(tu-tl)/2)**2
-            x[:tl]=0
-            return x
-
-        fid_cls=SymmetricTensorDict()
-
-        for k in pcls.spectra:
-            bcmb = fidcmb*beams[k]
-            fid_cls[k]=bcmb + fidize(pcls[k]-bcmb)
-
-
-        if (is_mpi_master()): print "Calculating detector covariance..."
         
+        # The fiducial model for the mask deconvolved Cl's which gets used in the covariance
+        fidcmb=SymmetricTensorDict(dict(zip([('T','T'),('E','E'),('B','B'),('T','E'),('E','B'),('T','B')],vstack([loadtxt(fidcmb)[:lmax].T,zeros((6,lmax))]))))
+        fid_cls=get_fid_cls(pcls,beams,fidcmb)
+
+        if (is_mpi_master()): print "Calculating Q terms..."
+        Qterms = [((i,a),(j,b)) for a,b in ps for i,j in pairs('TEB')]
+        def getQ(((i,a),(j,b))):
+            imll = imlls.get((a,b),{}).get(((a[0],b[0]),(i,j)))
+            if imll is not None: 
+                return (((i,a),(j,b)), 
+                        bin(todl*imll/beams[(a,b)],axis=1))
+            else: 
+                return None
+        Q = dict([x for x in mpi_thread_map(getQ,Qterms) if x is not None])
+        
+        
+        if (is_mpi_master()): print "Calculating detector covariance..."
+        def pclcov((a,b),(c,d)):
+            sym = lambda a,b: outer(a,b/2) + outer(b,a/2) #TODO: optimization here could improve speed
+            return  (sym(fid_cls[(a,c)],fid_cls[(b,d)])*tglls[(a,c),(b,d)] if (a,c) in fid_cls and (b,d) in fid_cls else 0 + 
+                     sym(fid_cls[(a,d)],fid_cls[(b,c)])*tglls[(a,d),(b,c)] if (a,d) in fid_cls and (b,c) in fid_cls else 0)
+
         def entry(((a,b),(c,d))):
             print "Calculating the %s entry."%(((a,b),(c,d)),)
-            # Equation (5)
-            pclcov = (lambda x: x+x.T)(outer(fid_cls[(a,c)],fid_cls[(b,d)]) + outer(fid_cls[(a,d)],fid_cls[(b,c)]))*glls[((a,b),(c,d))]/2
-            # Equation (7)
-            entry = dot(bin(transpose([todl])*(imlls[(a,b)]/transpose([beams[(a,b)]])),axis=0),dot(pclcov,bin(transpose([todl])*(imlls[(c,d)]/transpose([beams[(c,d)]])),axis=0).T))*calib[a]*calib[b]*calib[c]*calib[d]
-            return (((a,b),(c,d)),entry)
 
-        hat_cls_det.cov=SymmetricTensorDict(mpi_thread_map(entry,pairs(ps)),rank=4)
-        
+            f = lambda i,a: (i,)+a[1:]
+
+            return (((a,b),(c,d)),
+                    array(sum(dot(Q[(i,a),(j,b)].T,dot(pclcov((f(i,a),f(j,b)),(f(k,c),f(l,d))),Q[(k,c),(l,d)]))
+                        for (i,j) in pairs('TEB') for (k,l) in pairs('TEB')
+                        if (((i,a),(j,b)) in Q and ((k,c),(l,d)) in Q)),dtype=float32))
+
+        hat_cls_det.cov=SymmetricTensorDict(mpi_thread_map2(entry,pairs(ps),distribute=False),rank=4)
+
+
         # Equation (9)
         if (is_mpi_master()): 
             print "Calculating covariance..."
             for ((alpha,beta),(gamma,delta)) in pairs(sorted(weights.keys())):
-                print ((alpha,beta),(gamma,delta))
+                "Calculating the %s entry."%(((alpha,beta),(gamma,delta)),)
                 abcds=[((a,b),(c,d)) 
                        for (a,b) in weights[(alpha,beta)] for (c,d) in weights[(gamma,delta)]]
                 hat_cls_freq.cov[((alpha,beta),(gamma,delta))] = \

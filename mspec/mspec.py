@@ -4,11 +4,12 @@ from collections import namedtuple, defaultdict, OrderedDict
 from itertools import takewhile, chain
 from numpy import *
 from numpy.linalg import norm
-from scipy.optimize import fmin
+from scipy.optimize import fmin, fmin_powell
 from utils import *
 from imp import load_source
 import sys, os, re, gc
 import os.path as osp
+import cPickle as pickle
 
 
 class SymmetricTensorDict(dict):
@@ -122,6 +123,10 @@ class PowerSpectra(object):
             if self.binning is None: self.ells = arange(bmax)
             else: self.ells = self.binning(arange(20000))[:bmax]
             
+    def __contains__(self,key):
+        if not isinstance(key,tuple): key = (key,key)
+        return key in self.spectra
+
     def __getitem__(self,key):
         if not isinstance(key,tuple): key = (key,key)
         return self.spectra[key]
@@ -580,8 +585,18 @@ def load_beams(params,slice_lmax=False):
         return PowerSpectra(beams)
 
     
-def load_pcls(pcls,lmax=None):
-    return PowerSpectra({k:loadtxt(v,usecols=[1])[slice(0,lmax)] for k,v in scan_pcls(pcls).items()})
+def load_pcls(pcls,lmax=None,maps=None):
+    if maps is not None:
+        polmaps = {id1:map1 for (id1,map1) in maps.items() if haspol(map1)}
+        exists = lambda k: k[0]=='T' or k[1:] in polmaps
+    else:
+        exists = lambda k: True
+        
+    return PowerSpectra({((x1,)+a,(x2,)+b):p 
+                         for (a,b),v in scan_pcls(pcls).items()
+                         for (x1,x2), p in zip(['l','TT','EE','BB','TE','TB','EB'],loadtxt(v)[slice(0,lmax)].T)[1:]
+                         if exists((x1,)+a) and exists((x2,)+b)})
+    
 
 def scan_pcls(pcls):
     return {k:v for k,v in scan_files(pcls,"(.*)__X__(.*)",transform=lambda x: tuple(tuple(xx.split('-')) for xx in x)).items() if not v.endswith("log")}
@@ -603,16 +618,18 @@ class load_files(dict):
         if column is not None: self.loadfn = lambda x: loadtxt(x,usecols=[1])
 
     def load(self):
-        return {k:self.loadfn(v) for k,v in self.items()}
+        loaded = {f:self.loadfn(f) for f in set(self.values())}
+        return {k:loaded[v] for k,v in self.items()}
 
 
 def equal_cross_weights(pcls):
     """
     Return a equal weighting of cross spectra of the detector maps in pcls 
     """
-    fks = set((k1[0],k2[0]) for k1,k2 in pcls.spectra)
-    weights = {(alpha,beta):{tuple(sorted((a,b))):1 for a,b in pcls.spectra if a!=b and a[0]==alpha and b[0]==beta} for alpha,beta in fks}
+    fks = set((k1[:-1],k2[:-1]) for k1,k2 in pcls.spectra)
+    weights = {(alpha,beta):{tuple(sorted((a,b))):1 for a,b in pcls.spectra if a!=b and a[:-1]==alpha and b[:-1]==beta} for alpha,beta in fks}
     return get_normed_weights(weights)
+
 
 
 def get_pcl_noise(weights, pcls):
@@ -622,14 +639,30 @@ def get_pcl_noise(weights, pcls):
     """
     pcl_sig = PowerSpectra({fpk:sum(pcls[dpk]*dpw for dpk,dpw in fpw.items()) for fpk,fpw in weights.items()})
     detmaps = set(chain(*[chain(*fpw.keys()) for fpw in weights.values()]))
-    pcl_nl = {dm:(pcls[(dm,dm)] - pcl_sig[(dm[0],dm[0])]) for dm in detmaps}
+    pcl_nl = {dm:(pcls[(dm,dm)] - pcl_sig[(dm[:-1],dm[:-1])]) for dm in detmaps if (dm[:-1],dm[:-1]) in pcl_sig}
     return pcl_nl
 
 
+
 def load_kernels(kernels,lmax=None):
-    glls=scan_files(kernels,'gll__(.*).npy',transform=lambda x: (lambda y: ((y[0],y[1]),(y[3],y[4])))(x[0].split('__')))
-    imlls=scan_files(kernels,'imll__(.*).npy',transform=lambda x: (lambda y: (y[0],y[2]))(x[0].split('__')))
-    return [SymmetricTensorDict(load_files(y,loadfn=lambda x: np.load(x)[slice(lmax),slice(lmax)]).load(),rank=r) for y,r in [(imlls,2),(glls,4)]]
+    gll_files=scan_files(kernels,'gll__(.*)',transform=lambda x: (lambda y: ((y[0],y[1]),(y[3],y[4])))(x[0].split('__')))
+    imll_files=scan_files(kernels,'imll__(.*)',transform=lambda x: (lambda y: (y[0],y[2]))(x[0].split('__')))
+
+    imlls,glls = [SymmetricTensorDict(load_files(y,loadfn=lambda x: pickle.load(open(x,"rb"))).load(),rank=r) for y,r in [(imll_files,2),(gll_files,4)]]
+
+    #do lmax slicing
+    if lmax is not None:
+        for d in [imlls,glls]:
+            for v1 in d.values():
+                for k,v in v1.items():
+                    if k=='PP': 
+                        lmax_in = v.shape[0]/2
+                        s=hstack([arange(lmax),arange(lmax_in,lmax_in+lmax)])
+                        v1[k]=v[ix_(s,s)]
+                    else:
+                        v1[k]=v[:lmax,:lmax]
+
+    return imlls,glls
 
 
 def get_normed_weights(weights):
@@ -647,9 +680,37 @@ def optimize_weights(pcls,weights=None, noise_range=(1500,2500)):
 
     pcl_nl = {m:mean(nl[slice(*noise_range)]) for m,nl in get_pcl_noise(weights,pcls).items()}
    
-    weights = {fpk:{mpk:1./pcl_nl[mpk[0]]/pcl_nl[mpk[0]] for mpk,mpw in fpw.items()} for fpk,fpw in weights.items()}
+    weights = {fpk:{mpk:1./pcl_nl.get(mpk[0],1)/pcl_nl.get(mpk[1],1) for mpk,mpw in fpw.items()} for fpk,fpw in weights.items()}
     return get_normed_weights(weights)
+
 
 def default_mask_name_transform(m):
     return osp.basename(m).replace('.fits','')
+
+
+
+def get_fid_cls(pcls,beams,fidcmb):
+    """
+    Get the fiducial model for the pcls (to be used in the covariance) given observed pcls, beams, and a fiducial cmb model. 
+    """
+    fid_cls=SymmetricTensorDict()
+
+    def fidize(y,window_len=200):
+        ys=smooth(y,window_len=window_len)
+        xpiv=window_len+2.
+        n = fmin_powell(lambda n: sum((ys[xpiv]*(arange(50,xpiv)/xpiv)**n - y[50:xpiv])**2),-1.,disp=False)
+        ys[2:xpiv] = ys[xpiv]*(arange(2,xpiv)/xpiv)**n
+        ys[:2]=0
+        return ys
+
+    for a,b in pcls.spectra:
+        bcmb = fidcmb[a[0],b[0]]*beams[a,b]
+        fid_cls[a,b] = (fidize(pcls[a,b]-bcmb) if a==b else 0) + bcmb
+        
+    return fid_cls
+
+def haspol(m):
+    import pyfits
+    return 'q_stokes' in [x.lower() for x in pyfits.open(m)[1].header.values() if isinstance(x,str)]
+
 

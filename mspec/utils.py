@@ -90,13 +90,26 @@ def mpi_map(function,sequence,mapfn=map,distribute=True):
                 comm.gather(mapfn(function, partition(sequence,size)[rank]))
                 return []
 
-def mpi_thread_map(function,sequence,nthreads=8):
+def mpi_thread_map(function,sequence,nthreads=8,distribute=True):
     """
     Map using mpi / threads
     """
-    return mpi_map(function,sequence,mapfn=Pool(nthreads).map)
+    return mpi_map(function,sequence,mapfn=Pool(nthreads).map,distribute=distribute)
 
 
+def mpi_thread_map2(function,sequence,nthreads=8,distribute=True):
+    """
+    Map using mpi4py_map and threads
+    """
+    
+    import mpi4py_map
+    
+    pool = Pool(nthreads)
+    def thread_map(sequence):
+        return pool.map(function,sequence)    
+    
+    return flatten(mpi4py_map.map(thread_map,chunks(sequence,nthreads)))
+    
 
 def mpi_map_array(function,sequence):
     (rank,size,comm) = get_mpi()
@@ -143,6 +156,10 @@ def partition(list, n):
     """Partition list into n nearly equal sublists"""
     division = len(list) / float(n)
     return [list[int(round(division * i)): int(round(division * (i + 1)))] for i in range(n)]
+
+def chunks(l, n):
+    """Partition list into length-n sublists"""
+    return [l[i:i+n] for i in range(0, len(l), n)]
 
 def str2bool(s):
     """Convert a string to boolean"""
