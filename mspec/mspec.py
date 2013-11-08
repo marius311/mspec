@@ -10,6 +10,8 @@ from imp import load_source
 import sys, os, re, gc
 import os.path as osp
 import cPickle as pickle
+import hashlib
+
 
 
 class SymmetricTensorDict(dict):
@@ -45,8 +47,8 @@ class SymmetricTensorDict(dict):
             dict.__setitem__(self,(b,a),value)
         else:
             ((a,b),(c,d)) = key
-            for k in set([((a,b),(c,d)),((b,a),(c,d)),((a,b),(d,c)),((b,a),(d,c))]): dict.__setitem__(self,k,value)
             for k in set([((c,d),(a,b)),((c,d),(b,a)),((d,c),(a,b)),((d,c),(b,a))]): dict.__setitem__(self,k,value.T if type(value)==ndarray else value)
+            for k in set([((a,b),(c,d)),((b,a),(c,d)),((a,b),(d,c)),((b,a),(d,c))]): dict.__setitem__(self,k,value)
 
     def setdefault(self, key, value):
         if key not in self: self[key]=value
@@ -713,4 +715,14 @@ def haspol(m):
     import pyfits
     return 'q_stokes' in [x.lower() for x in pyfits.open(m)[1].header.values() if isinstance(x,str)]
 
-
+def check_spicecache(polweight1,polweight2,spicecache):
+    """
+    Check whether the spice window file for the given combination of weight files
+    already exists in the folder spicecache. Returns a tuple of (filename,exists)
+    where exists is True/False.
+    """
+    md5 = hashlib.md5(hstack([polweight1,polweight2])).hexdigest()
+    cachefile = osp.join(spicecache,md5)
+    return (cachefile,osp.exists(cachefile))
+    
+    

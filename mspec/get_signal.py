@@ -95,7 +95,7 @@ def get_signal(lmax,
     if get_covariance:
         
         # The fiducial model for the mask deconvolved Cl's which gets used in the covariance
-        fidcmb=SymmetricTensorDict(dict(zip([('T','T'),('E','E'),('B','B'),('T','E'),('E','B'),('T','B')],vstack([loadtxt(fidcmb)[:lmax].T,zeros((6,lmax))]))))
+        fidcmb=SymmetricTensorDict(dict(zip([('T','T'),('E','E'),('B','B'),('T','E'),('E','B'),('T','B')],vstack([loadtxt(fidcmb)[:,:lmax],zeros((6,lmax))]))))
         fid_cls=get_fid_cls(pcls,beams,fidcmb)
 
         if (is_mpi_master()): print "Calculating Q terms..."
@@ -104,7 +104,7 @@ def get_signal(lmax,
             imll = imlls.get((a,b),{}).get(((a[0],b[0]),(i,j)))
             if imll is not None: 
                 return (((i,a),(j,b)), 
-                        bin(todl*imll/beams[(a,b)],axis=1))
+                        bin(todl*imll/beams[(a,b)],axis=0))
             else: 
                 return None
         Q = dict([x for x in mpi_thread_map(getQ,Qterms) if x is not None])
@@ -113,21 +113,20 @@ def get_signal(lmax,
         if (is_mpi_master()): print "Calculating detector covariance..."
         def pclcov((a,b),(c,d)):
             sym = lambda a,b: outer(a,b/2) + outer(b,a/2) #TODO: optimization here could improve speed
-            return  (sym(fid_cls[(a,c)],fid_cls[(b,d)])*tglls[(a,c),(b,d)] if (a,c) in fid_cls and (b,d) in fid_cls else 0 + 
-                     sym(fid_cls[(a,d)],fid_cls[(b,c)])*tglls[(a,d),(b,c)] if (a,d) in fid_cls and (b,c) in fid_cls else 0)
-
+            return  ((sym(fid_cls[(a,c)],fid_cls[(b,d)])*tglls[(a,c),(b,d)] if ((a,c) in fid_cls and (b,d) in fid_cls) else 0) + 
+                     (sym(fid_cls[(a,d)],fid_cls[(b,c)])*tglls[(a,d),(b,c)] if ((a,d) in fid_cls and (b,c) in fid_cls) else 0))
+ 
         def entry(((a,b),(c,d))):
             print "Calculating the %s entry."%(((a,b),(c,d)),)
 
             f = lambda i,a: (i,)+a[1:]
 
             return (((a,b),(c,d)),
-                    array(sum(dot(Q[(i,a),(j,b)].T,dot(pclcov((f(i,a),f(j,b)),(f(k,c),f(l,d))),Q[(k,c),(l,d)]))
+                    array(sum(dot(Q[(i,a),(j,b)],dot(pclcov((f(i,a),f(j,b)),(f(k,c),f(l,d))),Q[(k,c),(l,d)].T))
                         for (i,j) in pairs('TEB') for (k,l) in pairs('TEB')
                         if (((i,a),(j,b)) in Q and ((k,c),(l,d)) in Q)),dtype=float32))
-
+       
         hat_cls_det.cov=SymmetricTensorDict(mpi_thread_map2(entry,pairs(ps),distribute=False),rank=4)
-
 
         # Equation (9)
         if (is_mpi_master()): 
@@ -137,9 +136,8 @@ def get_signal(lmax,
                 abcds=[((a,b),(c,d)) 
                        for (a,b) in weights[(alpha,beta)] for (c,d) in weights[(gamma,delta)]]
                 hat_cls_freq.cov[((alpha,beta),(gamma,delta))] = \
-                                  sum(weights[(alpha,beta)][(a,b)]*weights[(gamma,delta)][(c,d)]*hat_cls_det.cov[((a,b),(c,d))] 
-                                      for ((a,b),(c,d)) in abcds)
-
+                                 sum(weights[(alpha,beta)][(a,b)]*weights[(gamma,delta)][(c,d)]*hat_cls_det.cov[((a,b),(c,d))] 
+                                     for ((a,b),(c,d)) in abcds)
 
     if (is_mpi_master()): 
         if detsignal is not None: 

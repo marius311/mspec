@@ -90,6 +90,21 @@ def mpi_map(function,sequence,mapfn=map,distribute=True):
                 comm.gather(mapfn(function, partition(sequence,size)[rank]))
                 return []
 
+def mpi_map2(function,sequence,mapfn=map,distribute=True):
+    """
+    Map using mpi4py_map
+    """
+    (rank,size,comm) = get_mpi()
+
+    sequence = mpi_consistent(sequence)
+
+    if (size==1):
+        return mapfn(function,sequence)
+    else:
+        import mpi4py_map
+        return mpi4py_map.map(function,sequence)
+
+
 def mpi_thread_map(function,sequence,nthreads=8,distribute=True):
     """
     Map using mpi / threads
