@@ -28,7 +28,7 @@ def get_pcls(maps,
     def getcmd(((id1,map1),(id2,map2))):
         clfile = os.path.join(pcls,'%s__X__%s'%('-'.join(id1),'-'.join(id2)))
         weight1, weight2 = masks.get(('T',)+id1), masks.get(('T',)+id2)
-        polweight1, polweight2 = masks.get(('P',)+id1,'YES'), masks.get(('P',)+id2,'YES')
+        polweight1, polweight2 = masks.get(('P',)+id1,weight1), masks.get(('P',)+id2,weight2)
         logfile = clfile+'.log'
         pol = {True:'YES',False:'NO'}[do_polarization and haspol(map2)]
         if pol=='YES' and spicecache is not None:
@@ -49,6 +49,7 @@ def get_pcls(maps,
                     'nlmax':lmax,
                     'decouple':'YES',
                     'clfile':clfile}
+                
         return cmd_dict
     
     def dowork((cmd_dict,waitforwindow)):
@@ -67,7 +68,8 @@ def get_pcls(maps,
         if 'windowfileout' in cmd_dict: print ' (creating cache %s)'%cmd_dict['windowfileout']
         elif 'windowfilein' in cmd_dict: print ' (using cache %s)'%cmd_dict['windowfilein']
         
-        cmd = ' '.join([spice]+['-%s %s'%(k,v) for k,v in cmd_dict.items()]) + ' &> /dev/null'
+        cmd = ' '.join([spice]+['-%s %s'%(k,v) for k,v in cmd_dict.items()]) 
+        #cmd += ' &> /dev/null '
         cmd += ' '*10000 #for some reason this solves an MPI crashing bug
 
         start=time.time()
