@@ -589,13 +589,11 @@ def load_pcls(pcls,lmax=None,maps=None):
     if maps is not None:
         polmaps = {id1:map1 for (id1,map1) in maps.items() if haspol(map1)}
         exists = lambda k: k[0]=='T' or k[1:] in polmaps
-    else:
-        exists = lambda k: True
         
     return PowerSpectra({((x1,)+a,(x2,)+b):p 
                          for (a,b),v in scan_pcls(pcls).items()
                          for (x1,x2), p in zip(['l','TT','EE','BB','TE','TB','EB'],loadtxt(v)[slice(0,lmax)].T)[1:]
-                         if exists((x1,)+a) and exists((x2,)+b)})
+                         if maps is None or (exists((x1,)+a) and exists((x2,)+b))})
     
 
 def scan_pcls(pcls):
