@@ -712,7 +712,7 @@ def get_fid_cls(pcls,beams,fidcmb):
 def haspol(m):
     import pyfits
     columns = [x.lower() for x in pyfits.open(m)[1].header.values() if isinstance(x,str)]
-    return any(('q_stokes' in c) or ('q-pol' in c) for c in columns)
+    return any([('q_stokes' in c) or ('q-pol' in c) for c in columns])
 
 def check_spicecache(polweight1,polweight2,spicecache):
     """
