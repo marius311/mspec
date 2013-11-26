@@ -74,8 +74,8 @@ def get_signal(lmax,
         tgll_dict = SymmetricTensorDict({(tuple(ki),tuple(kj)):(lambda x: (x[:2],x[2:]))(tgll_entries[i][j])
                                          for i,ki in enumerate(tgll_keys) 
                                          for j,kj in enumerate(tgll_keys)},rank=4)
-        tglls = SymmetricTensorDict({((dm1,dm2),(dm3,dm4)):glls[(tmasks[dm1],tmasks[dm2]),(tmasks[dm3],tmasks[dm4])][tgll_dict[(dm1[0],dm2[0]),(dm3[0],dm4[0])]]
-                                     for (dm1,dm2),(dm3,dm4) in pairs(pairs(ds))},rank=4)
+        def tglls((dm1,dm2),(dm3,dm4)):
+            return glls[(tmasks[dm1],tmasks[dm2]),(tmasks[dm3],tmasks[dm4])][tgll_dict[(dm1[0],dm2[0]),(dm3[0],dm4[0])]]
 
     ells = arange(lmax)
     todl = ells*(ells+1)/2./pi
@@ -99,22 +99,24 @@ def get_signal(lmax,
         fid_cls=get_fid_cls(pcls,beams,fidcmb)
 
         if (is_mpi_master()): print "Calculating Q terms..."
-        Qterms = [((i,a),(j,b)) for a,b in ps for i,j in pairs('TEB')]
+        Qterms = [((i,a),(j,b)) for a,b in ps for i in 'TEB' for j in 'TEB']
         def getQ(((i,a),(j,b))):
             imll = imlls.get((a,b),{}).get(((a[0],b[0]),(i,j)))
-            if imll is not None: 
-                return (((i,a),(j,b)), 
-                        bin(todl*imll/beams[(a,b)],axis=0))
+            if (imll is not None and
+                #Because Q symmetry is not same as what I assume for imlls (which are a SymmetricTensorDict(rank=4)):
+                ((a[0],b[0]),(i,j)) not in chain(*[((x,x[::-1]),(x[::-1],x)) 
+                                                   for x in [('T','E'),('T','B'),('E','B')]])):  
+                return (((i,a),(j,b)), bin(todl*imll/beams[(a,b)],axis=0))
             else: 
                 return None
-        Q = dict([x for x in mpi_thread_map(getQ,Qterms) if x is not None])
+        Q = dict([x for x in (mpi_thread_map if (get_mpi_size()!=1) else map)(getQ,Qterms) if x is not None])
         
         
         if (is_mpi_master()): print "Calculating detector covariance..."
         def pclcov((a,b),(c,d)):
             sym = lambda a,b: outer(a,b/2) + outer(b,a/2) #TODO: optimization here could improve speed
-            return  ((sym(fid_cls[(a,c)],fid_cls[(b,d)])*tglls[(a,c),(b,d)] if ((a,c) in fid_cls and (b,d) in fid_cls) else 0) + 
-                     (sym(fid_cls[(a,d)],fid_cls[(b,c)])*tglls[(a,d),(b,c)] if ((a,d) in fid_cls and (b,c) in fid_cls) else 0))
+            return  ((sym(fid_cls[(a,c)],fid_cls[(b,d)])*tglls((a,c),(b,d)) if ((a,c) in fid_cls and (b,d) in fid_cls) else 0) + 
+                     (sym(fid_cls[(a,d)],fid_cls[(b,c)])*tglls((a,d),(b,c)) if ((a,d) in fid_cls and (b,c) in fid_cls) else 0))
  
         def entry(((a,b),(c,d))):
             print "Calculating the %s entry."%(((a,b),(c,d)),)
@@ -123,10 +125,10 @@ def get_signal(lmax,
 
             return (((a,b),(c,d)),
                     array(sum(dot(Q[(i,a),(j,b)],dot(pclcov((f(i,a),f(j,b)),(f(k,c),f(l,d))),Q[(k,c),(l,d)].T))
-                        for (i,j) in pairs('TEB') for (k,l) in pairs('TEB')
+                        for i in 'TEB' for j in 'TEB' for k in 'TEB' for l in 'TEB'
                         if (((i,a),(j,b)) in Q and ((k,c),(l,d)) in Q)),dtype=float32))
-       
-        hat_cls_det.cov=SymmetricTensorDict(mpi_thread_map2(entry,pairs(ps),distribute=False),rank=4)
+
+        hat_cls_det.cov=SymmetricTensorDict((mpi_thread_map2 if (get_mpi_size()!=1) else lambda *a, **_: map(*a))(entry,pairs(ps),distribute=False),rank=4)
 
         # Equation (9)
         if (is_mpi_master()): 
@@ -142,7 +144,8 @@ def get_signal(lmax,
     if (is_mpi_master()): 
         if detsignal is not None: 
             with open(detsignal,"w") as f: cPickle.dump(hat_cls_det,f)
-        with open(signal,"w") as f: cPickle.dump(hat_cls_freq,f)
+        if signal is not None:
+            with open(signal,"w") as f: cPickle.dump(hat_cls_freq,f)
 
-    return hat_cls_freq
+    return hat_cls_freq, hat_cls_det
 
