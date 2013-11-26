@@ -69,7 +69,7 @@ def get_pcls(maps,
         elif 'windowfilein' in cmd_dict: print ' (using cache %s)'%cmd_dict['windowfilein']
         
         cmd = ' '.join([spice]+['-%s %s'%(k,v) for k,v in cmd_dict.items()]) 
-        #cmd += ' &> /dev/null '
+        cmd += ' &> /dev/null '
         cmd += ' '*10000 #for some reason this solves an MPI crashing bug
 
         start=time.time()
@@ -104,7 +104,7 @@ def get_pcls(maps,
     #order the jobs so precomputation of windowfile happens efficiently
     alljobs = {}; alljobs.update(tjobs); alljobs.update(pjobs);
     def zipwith(x,val): return zip(x,[val]*len(x))
-    jobs = zipwith(list({cmd['windowfile']:job for job,cmd in alljobs.items() if cmd.get('windowfile') is not None}.values()),False)
+    jobs = zipwith(list({cmd['_windowfile']:job for job,cmd in alljobs.items() if cmd.get('_windowfile') is not None}.values()),False)
     jobs += zipwith(tjobs.keys(),False)
     jobs += zipwith(list(set(alljobs.keys()) - set([j for j,_ in jobs])),True)    
                 
