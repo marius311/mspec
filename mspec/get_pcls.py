@@ -16,6 +16,7 @@ def get_pcls(maps,
              spicecache=None,
              do_polarization=False,
              overwrite=True,
+             spiceargs=None,
              **kwargs):
 
     if isinstance(masks,str): 
@@ -49,6 +50,7 @@ def get_pcls(maps,
                     'nlmax':lmax,
                     'decouple':'YES',
                     'clfile':clfile}
+        if spiceargs is not None: cmd_dict.update(spiceargs)
                 
         return cmd_dict
     

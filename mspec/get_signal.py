@@ -30,6 +30,7 @@ def get_signal(lmax,
                masks=None,
                detsignal=None,
                get_covariance=False,
+               do_polarization=True,
                mask_name_transform=default_mask_name_transform,
                **kwargs):
     """
@@ -57,7 +58,7 @@ def get_signal(lmax,
     # Load mode coupling matrices
     if get_covariance:
         if (is_mpi_master()): print "Loading kernels..."
-        imlls, glls = load_kernels(kernels,lmax=lmax)
+        imlls, glls = load_kernels(kernels,lmax=lmax,pol=do_polarization)
         tmasks = {((x,)+k[1:]):mask_name_transform(v) for k,v in masks.items() for x in (['T'] if k[0]=='T' else ['E','B'])}
 
         imlls = {(dm1,dm2):SymmetricTensorDict(imlls[tmasks[dm1],tmasks[dm2]],rank=4) for dm1,dm2 in ps}

@@ -6,12 +6,15 @@ from numpy import *
 from numpy.linalg import norm
 from scipy.optimize import fmin, fmin_powell
 from utils import *
-from imp import load_source
+from imp import load_source, new_module
 import sys, os, re, gc
 import os.path as osp
 import cPickle as pickle
 import hashlib
 
+
+#create emtpy module for dynamically loaded mspec data files to reside in
+sys.modules['mspec.datafiles']=new_module('mspec.datafiles')
 
 
 class SymmetricTensorDict(dict):
@@ -264,7 +267,7 @@ class PowerSpectra(object):
         return [(newmap,[(newmap,calib[maps.index(newmap)] if newmap in maps else 1)]) for newmap in self.get_maps()]
         
     
-    def lincombo(self,new_maps,normalize=True):
+    def lincombo(self,new_maps,normalize=True,docov=True):
         """
         Return a new PowerSpectra corresponding to forming a linear combination of maps.
         
@@ -272,6 +275,7 @@ class PowerSpectra(object):
         new_maps -- A dictionary mapping the new maps to linear combinations of the old maps.
                     For example, {'217c': [('217',1),('353',-.14)], '143c': [('143',1),('353',-.038)]}
         normalize -- Whether to normalize the sum of the weights to 1 (i.e. keep the CMB constant)
+        docov -- Whether to do the covariance as well. 
         """
         spectra = SymmetricTensorDict([
               ((alpha2,beta2),
@@ -280,7 +284,7 @@ class PowerSpectra(object):
               for ((alpha2,coeff_a),(beta2,coeff_b)) in pairs(new_maps.items())
           ],rank=2)
         
-        if self.cov:
+        if docov and self.cov:
             cov = SymmetricTensorDict([
                   (((alpha2,beta2),(gamma2,delta2)),
                    sum(
@@ -442,7 +446,7 @@ class MDict(dict):
         self.__dict__ = self
 
 
-def read_ini(params):
+def read_ini(params,*args,**kwargs):
     """
     Read and process an mspec ini file, returning a dictionary.
     
@@ -450,7 +454,14 @@ def read_ini(params):
     params -- A string filename, or a dictionary for an already loaded file.
     """
     
-    return MDict(**{k:v for k,v in vars(load_source('params1',params)).items() if not k.startswith('_')})
+    
+    src = load_source('mspec.datafiles.%s'%hashlib.md5(open(params).read()).hexdigest(),params)
+    if hasattr(src,'getmspec'):
+        d = src.getmspec(*args,**kwargs)
+    else:
+        d = vars(src)
+    
+    return MDict(**{k:v for k,v in d.items() if not k.startswith('_')})
 
 
 def get_bin_func(binstr,q=None):
@@ -644,11 +655,19 @@ def get_pcl_noise(weights, pcls):
 
 
 
-def load_kernels(kernels,lmax=None):
+def load_kernels(kernels,lmax=None,pol=True):
     gll_files=scan_files(kernels,'gll__(.*)',transform=lambda x: (lambda y: ((y[0],y[1]),(y[3],y[4])))(x[0].split('__')))
     imll_files=scan_files(kernels,'imll__(.*)',transform=lambda x: (lambda y: (y[0],y[2]))(x[0].split('__')))
 
-    imlls,glls = [SymmetricTensorDict(load_files(y,loadfn=lambda x: pickle.load(open(x,"rb"))).load(),rank=r) for y,r in [(imll_files,2),(gll_files,4)]]
+    def loadfn(x):
+        x = pickle.load(open(x,"rb"))
+        if not pol:
+            for k in x.keys():
+                if set(chain(*k))!={'T'}: x.pop(k)
+        return x
+    
+    imlls,glls = [SymmetricTensorDict(load_files(y,loadfn=loadfn).load(),rank=r) 
+                  for y,r in [(imll_files,2),(gll_files,4)]]
 
     #do lmax slicing
     if lmax is not None:
@@ -663,7 +682,6 @@ def load_kernels(kernels,lmax=None):
                         v1[k]=v[:lmax,:lmax]
 
     return imlls,glls
-
 
 def get_normed_weights(weights):
     """
