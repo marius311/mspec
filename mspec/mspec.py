@@ -633,12 +633,13 @@ class load_files(dict):
         return {k:loaded[v] for k,v in self.items()}
 
 
-def equal_cross_weights(pcls):
+def equal_cross_weights(pcls,autoTE=False):
     """
     Return a equal weighting of cross spectra of the detector maps in pcls 
     """
     fks = set((k1[:-1],k2[:-1]) for k1,k2 in pcls.spectra)
-    weights = {(alpha,beta):{tuple(sorted((a,b))):1 for a,b in pcls.spectra if a!=b and a[:-1]==alpha and b[:-1]==beta} for alpha,beta in fks}
+    usespec = (lambda a,b: a!=b) if autoTE else (lambda a,b: a[1:]!=b[1:])
+    weights = {(alpha,beta):{tuple(sorted((a,b))):1 for a,b in pcls.spectra if usespec(a,b) and a[:-1]==alpha and b[:-1]==beta} for alpha,beta in fks}
     return get_normed_weights(weights)
 
 
@@ -690,11 +691,11 @@ def get_normed_weights(weights):
     return {fpk:{mpk:mpw/float(sum(fpw.values())) for mpk,mpw in fpw.items()} for fpk,fpw in weights.items() if len(fpw)>0}
 
 
-def optimize_weights(pcls,weights=None, noise_range=(1500,2500)):
+def optimize_weights(pcls,weights=None, noise_range=(1500,2500), autoTE=False):
     """
     Use the given weights to call get_pcl_noise and then construct an inverse variance noise weighting. 
     """
-    if weights is None: weights = equal_cross_weights(pcls)
+    if weights is None: weights = equal_cross_weights(pcls, autoTE=autoTE)
 
     pcl_nl = {m:mean(nl[slice(*noise_range)]) for m,nl in get_pcl_noise(weights,pcls).items()}
    
@@ -712,18 +713,22 @@ def get_fid_cls(pcls,beams,fidcmb):
     Get the fiducial model for the pcls (to be used in the covariance) given observed pcls, beams, and a fiducial cmb model. 
     """
     fid_cls=SymmetricTensorDict()
+    
+    fidargs = {('T','T'):(200,1000,2),
+               ('E','E'):(200,None,None),
+               ('B','B'):(200,None,None)}
 
-    def fidize(y,window_len=200):
+    def fidize(y,window_len=200,xpiv=None,n=None):
         ys=smooth(y,window_len=window_len)
-        xpiv=window_len+2.
-        n = fmin_powell(lambda n: sum((ys[xpiv]*(arange(50,xpiv)/xpiv)**n - y[50:xpiv])**2),-1.,disp=False)
-        ys[2:xpiv] = ys[xpiv]*(arange(2,xpiv)/xpiv)**n
+        if xpiv is None: xpiv=window_len+2
+        if n is None: n = fmin_powell(lambda n: sum((ys[xpiv]*(arange(50,xpiv)/xpiv)**n - y[50:xpiv])**2),-1.,disp=False)
+        ys[2:xpiv] = ys[xpiv]*(arange(2,xpiv)/float(xpiv))**n
         ys[:2]=0
         return ys
 
     for a,b in pcls.spectra:
         bcmb = fidcmb[a[0],b[0]]*beams[a,b]
-        fid_cls[a,b] = (fidize(pcls[a,b]-bcmb) if a==b else 0) + bcmb
+        fid_cls[a,b] = (fidize(pcls[a,b]-bcmb,*fidargs[a[0],b[0]]) if a==b else 0) + bcmb
         
     return fid_cls
 
