@@ -529,16 +529,16 @@ def get_bin_func(binstr,q=None):
 
     if binstr=="ctp":
         ctpbins=loadtxt(os.path.join(Mrootdir,"dat/CTP_bin_TT_orig"),dtype=int)
-        return get_q_bin(lims_to_q(list(ctpbins[:,[1,2]])+[(l,l+200) for l in range(3001,6000,200)]))
+        return get_q_bin(lims_to_q(list(ctpbins[:,[1,2]])+[(l,l+199) for l in range(3001,6000,200)]))
 
     if binstr=='wmap':
         wmapbins=array(loadtxt(os.path.join(Mrootdir,"dat/wmap_binned_tt_spectrum_7yr_v4p1.txt"))[:,:3],dtype=int)
-        return get_q_bin(lims_to_q(list(wmapbins[:-2,[1,2]])+[(l,l+50) for l in range(1001,2000,50)]+[(l,l+200) for l in range(2001,4000,200)]))
+        return get_q_bin(lims_to_q(list(wmapbins[:-2,[1,2]])+[(l,l+49) for l in range(1001,2000,50)]+[(l,l+199) for l in range(2001,4000,200)]))
 
     r = re.match("flat\((?:dl=)?([0-9]+)\)",binstr)
     if r!=None:
         dl=int(r.group(1))
-        return get_q_bin(lims_to_q([(l,l+dl) for l in dl*arange(10000/dl)]))
+        return get_q_bin(lims_to_q([(l,l+dl-1) for l in dl*arange(10000/dl)]))
 
 
     raise ValueError("Unknown binning function '"+binstr+"'")
