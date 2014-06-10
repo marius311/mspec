@@ -157,8 +157,9 @@ def get_pcls_healpy(maps,
             print "Warning setting %i (%.3f%%) UNSEEN pixels to zero."%(nbad,100*nbad/(12*2048**2.))
             m[badidx]=0
          
-        return (id,array(atleast_2d(H.map2alm(m,lmax=lmax)),dtype=float32))
-        
+        # return (id,array(atleast_2d(H.map2alm(m,lmax=lmax)),dtype=float32))
+        return (id,atleast_2d(H.map2alm(m,lmax=lmax)))
+
     pmaps = {id1:map1 for (id1,map1) in maps.items() 
              if do_polarization and haspol(map1)}
     tmaps = dict(set(maps.items()) - set(pmaps.items()))

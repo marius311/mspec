@@ -44,14 +44,23 @@ class SymmetricTensorDict(dict):
 
 
     def __setitem__(self, key, value):
-        if (self.rank==2):
-            (a,b) = key
-            dict.__setitem__(self,(a,b),value)
-            dict.__setitem__(self,(b,a),value)
+        if hasattr(self,'rank'):
+            if (self.rank==2):
+                (a,b) = key
+                dict.__setitem__(self,(a,b),value)
+                dict.__setitem__(self,(b,a),value)
+            else:
+                ((a,b),(c,d)) = key
+                for k in set([((c,d),(a,b)),((c,d),(b,a)),((d,c),(a,b)),((d,c),(b,a))]): dict.__setitem__(self,k,value.T if type(value)==ndarray else value)
+                for k in set([((a,b),(c,d)),((b,a),(c,d)),((a,b),(d,c)),((b,a),(d,c))]): dict.__setitem__(self,k,value)
         else:
-            ((a,b),(c,d)) = key
-            for k in set([((c,d),(a,b)),((c,d),(b,a)),((d,c),(a,b)),((d,c),(b,a))]): dict.__setitem__(self,k,value.T if type(value)==ndarray else value)
-            for k in set([((a,b),(c,d)),((b,a),(c,d)),((a,b),(d,c)),((b,a),(d,c))]): dict.__setitem__(self,k,value)
+            #hack for a protocol=2 unpickling bug, 
+            #which seems to call __setitem__ before 
+            #setting self.rank
+            dict.__setitem__(self,key,value)
+
+
+
 
     def setdefault(self, key, value):
         if key not in self: self[key]=value
@@ -475,9 +484,13 @@ def get_bin_func(binstr,q=None):
     C2 -- C2 comparison binning
     flat(x) -- Uniform bins of width x
     """
+    _binstr, _q = binstr, q
     binstr = binstr.lower()
 
-    if (binstr is None or binstr=="none"): return lambda x, **kwargs: x
+    if (binstr is None or binstr=="none"):
+        def nobin(x,**kwargs): return x
+        nobin.__reduce_ex__ = lambda _: (get_bin_func,(_binstr,_q))
+        return nobin
 
     def slice_bins(lmins,lmaxs,lslice):
         """Gets bin slice correpsonding to ell-slice 's'."""
@@ -512,6 +525,7 @@ def get_bin_func(binstr,q=None):
         q_bin.q = q
         q_bin.lmaxs = lmaxs
         q_bin.lmins = lmins
+        q_bin.__reduce_ex__ = lambda _: (get_bin_func,(_binstr,_q))
         return q_bin
 
 
@@ -539,6 +553,12 @@ def get_bin_func(binstr,q=None):
     if r!=None:
         dl=int(r.group(1))
         return get_q_bin(lims_to_q([(l,l+dl-1) for l in dl*arange(10000/dl)]))
+
+    r = re.match("file\((.*)\)",_binstr)
+    if r!=None:
+        bins=loadtxt(r.group(1),dtype=int)
+        return get_q_bin(lims_to_q(bins))
+
 
 
     raise ValueError("Unknown binning function '"+binstr+"'")
@@ -708,7 +728,7 @@ def default_mask_name_transform(m):
 
 
 
-def get_fid_cls(pcls,beams,fidcmb,pixwin):
+def get_fid_cls(pcls,beams,fidcmb,pixwin,nl_eff=1):
     """
     Get the fiducial model for the pcls (to be used in the covariance) given observed pcls, beams, and a fiducial cmb model.
     """
@@ -728,14 +748,14 @@ def get_fid_cls(pcls,beams,fidcmb,pixwin):
 
     for a,b in pcls.spectra:
         bcmb = fidcmb[a[0],b[0]]*beams[a,b]*pixwin
-        fid_cls[a,b] = (fidize(pcls[a,b]-bcmb,*fidargs[a[0],b[0]]) if a==b else 0) + bcmb
+        fid_cls[a,b] = (fidize(pcls[a,b]-bcmb,*fidargs[a[0],b[0]])*nl_eff if a==b else 0) + bcmb
 
     return fid_cls
 
 def haspol(m):
     import pyfits
     columns = [x.lower() for x in pyfits.open(m)[1].header.values() if isinstance(x,str)]
-    return any([('q_stokes' in c) or ('q-pol' in c) for c in columns])
+    return any([('q_' in c) or ('q-pol' in c) for c in columns])
 
 def check_spicecache(polweight1,polweight2,spicecache):
     """

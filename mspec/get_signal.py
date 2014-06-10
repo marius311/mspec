@@ -32,6 +32,8 @@ def get_signal(lmax,
                get_covariance=False,
                do_polarization=True,
                transform_tool='healpy',
+               rescale=1e12,
+               nl_eff=1,
                mask_name_transform=default_mask_name_transform,
                **kwargs):
     """
@@ -40,7 +42,7 @@ def get_signal(lmax,
 
     # Load stuff
     if (is_mpi_master()): print "Loading pseudo-cl's..."
-    pcls = load_pcls(pcls,maps=maps).sliced(lmax).rescaled(1e12)
+    pcls = load_pcls(pcls,maps=maps).sliced(lmax).rescaled(rescale)
 
     if (is_mpi_master()): print "Loading beams..."
     if isinstance(beams,load_files): beams = PowerSpectra(beams.load()).sliced(lmax)
@@ -63,6 +65,10 @@ def get_signal(lmax,
     if get_covariance or transform_tool=='healpy':
         if (is_mpi_master()): print "Loading kernels..."
         if masks:
+
+            if isinstance(masks,str):
+                masks={((x,)+mid):masks for mid in maps for x in 'TP'}
+
             imlls, glls = load_kernels(kernels,lmax=lmax,pol=do_polarization)
             tmasks = {((x,)+k[1:]):mask_name_transform(v) for k,v in masks.items() for x in (['T'] if k[0]=='T' else ['E','B'])}
 
@@ -105,13 +111,13 @@ def get_signal(lmax,
 
     #Equation (4), the per detector signal estimate
     if (is_mpi_master()): print "Calculating per-detector signal..."
-    hat_cls_det = PowerSpectra(ells=bin(ells))
+    hat_cls_det = PowerSpectra(ells=bin(ells),binning=bin)
     for (a,b) in ps:
         hat_cls_det[(a,b)] = bin(todl*(pcls[(a,b)] - (noise[a] if a==b else 0) - subpix[a,b])/beams[(a,b)])
 
     # Equation (6), the per frequency signal estimate
     if (is_mpi_master()): print "Calculating signal..."
-    hat_cls_freq=PowerSpectra(ells=bin(ells)) #TODO binning
+    hat_cls_freq=PowerSpectra(ells=bin(ells),binning=bin) #TODO binning
     for fk in weights:
         hat_cls_freq[fk] = sum(hat_cls_det[mk]*w for mk,w in weights[fk].items())
 
@@ -119,7 +125,7 @@ def get_signal(lmax,
 
         # The fiducial model for the mask deconvolved Cl's which gets used in the covariance
         fidcmb=SymmetricTensorDict(dict(zip([('T','T'),('E','E'),('B','B'),('T','E'),('E','B'),('T','B')],vstack([loadtxt(fidcmb)[:,:lmax],zeros((6,lmax))]))))
-        fid_cls=get_fid_cls(pcls,beams,fidcmb,pixwin)
+        fid_cls=get_fid_cls(pcls,beams,fidcmb,pixwin,nl_eff=nl_eff)
 
         if (is_mpi_master()): print "Calculating Q terms..."
         Qterms = [((i,a),(j,b)) for a,b in ps for i in 'TEB' for j in 'TEB']
@@ -169,9 +175,9 @@ def get_signal(lmax,
 
     if (is_mpi_master()):
         if detsignal is not None:
-            with open(detsignal,"w") as f: cPickle.dump(hat_cls_det,f)
+            with open(detsignal,"w") as f: cPickle.dump(hat_cls_det,f,protocol=2)
         if signal is not None:
-            with open(signal,"w") as f: cPickle.dump(hat_cls_freq,f)
+            with open(signal,"w") as f: cPickle.dump(hat_cls_freq,f,protocol=2)
 
     return hat_cls_freq, hat_cls_det
 
