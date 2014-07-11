@@ -29,6 +29,8 @@ class SymmetricTensorDict(dict):
         ((a,b),(c,d)) = ((b,a),(c,d)) = ((a,b),(d,c)) = ((c,d),(a,b))^T
     """
 
+    rank = 2
+    
     def __init__(self, *args, **kwargs):
         """
         If created with rank=2 the symmetry properties are
