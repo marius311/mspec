@@ -11,7 +11,7 @@ from multiprocessing.dummy import Pool
 def_dtype = float64
     
 """ The Mspec root directory (used for loading some Mspec-wide files) """
-Mrootdir = os.path.abspath(os.path.join(os.path.dirname(__file__),".."))
+Mrootdir = os.path.abspath(os.path.dirname(__file__))
 
 """ If True, don't even try to load the mpi4py library or use MPI at all """
 NOMPI = False
