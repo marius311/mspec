@@ -11,6 +11,8 @@ import sys, os, re, gc
 import os.path as osp
 import cPickle as pickle
 import hashlib
+from multiprocessing import Pool
+from functools import partial
 
 
 #create emtpy module for dynamically loaded mspec data files to reside in
@@ -620,14 +622,14 @@ def load_beams(params,slice_lmax=False):
         return PowerSpectra(beams)
 
 
-def load_pcls(pcls,lmax=None,maps=None):
+def load_pcls(pcls,lmax=None,maps=None,pool=None):
     if maps is not None:
         polmaps = {id1:map1 for (id1,map1) in maps.items() if haspol(map1)}
         exists = lambda k: k[0]=='T' or k[1:] in polmaps
 
-    return PowerSpectra({((x1,)+a,(x2,)+b):p
-                         for (a,b),v in scan_pcls(pcls).items()
-                         for (x1,x2), p in zip(['l','TT','EE','BB','TE','TB','EB'],loadtxt(v)[slice(0,lmax)].T)[1:]
+    return PowerSpectra({((x1,)+a,(x2,)+b):v[slice(0,lmax),i]
+                         for (a,b),v in load_files(scan_pcls(pcls)).load(pool=pool).items()
+                         for i,(x1,x2) in enumerate(['TT','EE','BB','TE','TB','EB'],1)
                          if maps is None or (exists((x1,)+a) and exists((x2,)+b))})
 
 
@@ -645,13 +647,21 @@ def scan_files(folder,regex,transform=None,multiple_search=False):
 
 
 class load_files(dict):
-    def __init__(self,files,column=None,loadfn=None):
+    def __init__(self,files,usecols=None,loadfn=None):
         super(load_files,self).__init__(files)
-        self.loadfn = loadfn
-        if column is not None: self.loadfn = lambda x: loadtxt(x,usecols=[1])
+        if loadfn is None:
+            self.loadfn = partial(loadtxt,usecols=usecols)
 
-    def load(self):
-        loaded = {f:self.loadfn(f) for f in set(self.values())}
+    def load(self,pool=None):
+        self.killpool = (pool is None)
+        if pool is None: 
+            pool = Pool(get_num_threads())
+
+        files = list(set(self.values()))
+        try:
+            loaded = dict(zip(files,pool.map(self.loadfn,files)))
+        finally:
+            if self.killpool: pool.terminate()
         return {k:loaded[v] for k,v in self.items()}
 
 
@@ -677,8 +687,43 @@ def get_pcl_noise(weights, pcls):
     return pcl_nl
 
 
+try:
+    import h5py
+except ImportError:
+    pass
+else:
+    class HDFWrapper(object):
+        """
+        Simple wrapper that lets us index HDF files by tuples rather than only strings.
+        """ 
 
-def load_kernels(kernels,lmax=None,pol=True):
+        def __init__(self,root):
+            self.root = root
+            
+        def __getitem__(self,key):
+            value = self.root[str(key)]
+            if isinstance(value,h5py.Dataset): return value.value
+            elif isinstance(value,h5py.Group): return HDFWrapper(value)
+            else: return value
+            
+        def __contains__(self,key):
+            return str(key) in self.root
+
+        def get(self,key,default=None):
+            if key in self: return self[key]
+            else: return default
+        
+        def keys(self):
+            def tryeval(x):
+                try: return eval(x)
+                except: return x
+            return map(tryeval,self.root.keys())
+
+    def load_kernels(kernels,lmax=None,pol=True):
+        return HDFWrapper(h5py.File(kernels))
+
+
+def load_kernels_pickle(kernels,lmax=None,pol=True):
     gll_files=scan_files(kernels,'gll__(.*)',transform=lambda x: (lambda y: ((y[0],y[1]),(y[3],y[4])))(x[0].split('__')))
     imll_files=scan_files(kernels,'imll__(.*)',transform=lambda x: (lambda y: (y[0],y[2]))(x[0].split('__')))
 
@@ -713,7 +758,7 @@ def get_normed_weights(weights):
     return {fpk:{mpk:mpw/float(sum(fpw.values())) for mpk,mpw in fpw.items()} for fpk,fpw in weights.items() if len(fpw)>0}
 
 
-def optimize_weights(pcls,weights=None, noise_range=(1500,2500), autoTE=False):
+def optimize_weights(pcls,weights=None, noise_range=(1500,2500), autoTE=False, use=None):
     """
     Use the given weights to call get_pcl_noise and then construct an inverse variance noise weighting.
     """
@@ -721,7 +766,10 @@ def optimize_weights(pcls,weights=None, noise_range=(1500,2500), autoTE=False):
 
     pcl_nl = {m:mean(nl[slice(*noise_range)]) for m,nl in get_pcl_noise(weights,pcls).items()}
 
-    weights = {fpk:{mpk:1./pcl_nl.get(mpk[0],1)/pcl_nl.get(mpk[1],1) for mpk,mpw in fpw.items()} for fpk,fpw in weights.items()}
+    weights = {fpk:{mpk:1./pcl_nl.get(mpk[0],1)/pcl_nl.get(mpk[1],1) 
+                    for mpk,mpw in fpw.items()
+                    if use is None or use(mpk)}
+               for fpk,fpw in weights.items()}
     return get_normed_weights(weights)
 
 
@@ -770,3 +818,9 @@ def check_spicecache(polweight1,polweight2,spicecache):
     return (cachefile,osp.exists(cachefile))
 
 
+def sym_kerns(imll):
+    """
+    Add all keys to imll which are equal due to symmetry.
+    e.g. set ET,ET = TE,TE, etc... 
+    """
+    imll['BT']

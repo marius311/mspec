@@ -64,7 +64,7 @@ def mpi_consistent(value):
     if comm==None: return value
     else: return comm.bcast(value)
 
-def mpi_map(function,sequence,mapfn=map,distribute=True):
+def mpi_map(function,sequence,pool=None,distribute=True):
     """
     A map function parallelized with MPI. If this program was called with mpiexec -n $NUM, 
     then partitions the sequence into $NUM blocks and each MPI process does the rank-th one.
@@ -78,53 +78,37 @@ def mpi_map(function,sequence,mapfn=map,distribute=True):
 
     sequence = mpi_consistent(sequence)
 
+    if pool is not None: _map=pool.map
+    else: _map=map
+
     if (size==1):
-        return mapfn(function,sequence)
+        return _map(function,sequence)
     else:
         if (distribute):
-            return flatten(comm.allgather(mapfn(function, partition(sequence,size)[rank])))
+            return flatten(comm.allgather(_map(function, partition(sequence,size)[rank])))
         else:
             if (rank==0):
-                return flatten(comm.gather(mapfn(function, partition(sequence,size)[rank])))
+                return flatten(comm.gather(_map(function, partition(sequence,size)[rank])))
             else:
-                comm.gather(mapfn(function, partition(sequence,size)[rank]))
+                comm.gather(_map(function, partition(sequence,size)[rank]))
                 return []
 
-def mpi_map2(function,sequence,mapfn=map,distribute=True):
+def mpi_map2(function,sequence,pool=None,distribute=True,nthreads=None):
     """
     Map using mpi4py_map
     """
+    import mpi4py_map
     (rank,size,comm) = get_mpi()
 
     sequence = mpi_consistent(sequence)
-
-    if (size==1):
-        return mapfn(function,sequence)
-    else:
-        import mpi4py_map
+    if pool is None:
         return mpi4py_map.map(function,sequence)
+    else:
+        def thread_map(sequence):
+            return pool.map(function,sequence)    
+        return flatten(mpi4py_map.map(thread_map,chunks(sequence,nthreads or get_num_threads())))
 
 
-def mpi_thread_map(function,sequence,nthreads=8,distribute=True):
-    """
-    Map using mpi / threads
-    """
-    return mpi_map(function,sequence,mapfn=Pool(nthreads).map,distribute=distribute)
-
-
-def mpi_thread_map2(function,sequence,nthreads=8,distribute=True):
-    """
-    Map using mpi4py_map and threads
-    """
-    
-    import mpi4py_map
-    
-    pool = Pool(nthreads)
-    def thread_map(sequence):
-        return pool.map(function,sequence)    
-    
-    return flatten(mpi4py_map.map(thread_map,chunks(sequence,nthreads)))
-    
 
 def mpi_map_array(function,sequence):
     (rank,size,comm) = get_mpi()
