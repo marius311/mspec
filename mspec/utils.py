@@ -6,6 +6,7 @@ import traceback
 from collections import namedtuple
 from numpy.ma.core import sort
 from multiprocessing.dummy import Pool
+import threading
 
 """ When loading files via load_multi, this is the default type to convert them to """
 def_dtype = float64
@@ -16,6 +17,15 @@ Mrootdir = os.path.abspath(os.path.dirname(__file__))
 """ If True, don't even try to load the mpi4py library or use MPI at all """
 NOMPI = False
 
+""" Don't print log messages."""
+log_quiet = False
+
+def mspec_log(msg,rootlog=False,mpisafe=False):
+    if not log_quiet and (not rootlog or is_mpi_master()):
+        sig = ['?' if mpisafe else ('%%.%ii'%(int(floor(log10(get_mpi_size()))+1)))%get_mpi_rank(), str(os.getpid())]
+        if not (threading.current_thread().__class__.__name__ == '_MainThread'): 
+            sig.append(threading.currentThread().getName())
+        print '\033[95m%s:\033[0m %s'%('-'.join(sig),msg)
 
 
 def test_sym(m):
@@ -56,6 +66,8 @@ def get_mpi():
 def is_mpi_master(): return get_mpi_rank()==0
 def get_mpi_rank(): return get_mpi().rank
 def get_mpi_size(): return get_mpi().size
+
+
 
 
 def mpi_consistent(value):

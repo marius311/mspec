@@ -142,11 +142,9 @@ class PowerSpectra(object):
             else: self.ells = self.binning(arange(20000))[:bmax]
 
     def __contains__(self,key):
-        if not isinstance(key,tuple): key = (key,key)
         return key in self.spectra
 
     def __getitem__(self,key):
-        if not isinstance(key,tuple): key = (key,key)
         return self.spectra[key]
 
     def __setitem__(self,key,value):
@@ -474,7 +472,17 @@ def read_ini(params,*args,**kwargs):
     else:
         d = vars(src)
 
-    return MDict(**{k:v for k,v in d.items() if not k.startswith('_')})
+    return validate_params(MDict(**{k:v for k,v in d.items() if not k.startswith('_')}))
+
+def validate_params(p):
+    """
+    Do some universal checking / transforming of Mspec params.
+    """
+    if isinstance(p.masks,str): p.masks = {(x,)+k:p.masks for k in p.maps for x in 'TP'}
+    if 'masks_forgll' in p:
+        if isinstance(p.masks_forgll,str): p.masks_forgll = {(x,)+k:p.masks_forgll for k in p.maps for x in 'TP'}
+    return p
+
 
 
 def get_bin_func(binstr,q=None):
@@ -552,6 +560,10 @@ def get_bin_func(binstr,q=None):
     if binstr=='wmap':
         wmapbins=array(loadtxt(os.path.join(Mrootdir,"dat/wmap_binned_tt_spectrum_7yr_v4p1.txt"))[:,:3],dtype=int)
         return get_q_bin(lims_to_q(list(wmapbins[:-2,[1,2]])+[(l,l+49) for l in range(1001,2000,50)]+[(l,l+199) for l in range(2001,4000,200)]))
+
+    if binstr=='mspec':
+        wmapbins=array(loadtxt(os.path.join(Mrootdir,"dat/wmap_binned_tt_spectrum_7yr_v4p1.txt"))[:,:3],dtype=int)
+        return get_q_bin(lims_to_q(list(wmapbins[:-2,[1,2]])+[(l,l+49) for l in range(1001,4000,50)]))
 
     r = re.match("flat\((?:dl=)?([0-9]+)\)",binstr)
     if r!=None:
@@ -687,40 +699,36 @@ def get_pcl_noise(weights, pcls):
     return pcl_nl
 
 
-try:
-    import h5py
-except ImportError:
-    pass
-else:
-    class HDFWrapper(object):
-        """
-        Simple wrapper that lets us index HDF files by tuples rather than only strings.
-        """ 
-
-        def __init__(self,root):
-            self.root = root
-            
-        def __getitem__(self,key):
-            value = self.root[str(key)]
-            if isinstance(value,h5py.Dataset): return value.value
-            elif isinstance(value,h5py.Group): return HDFWrapper(value)
-            else: return value
-            
-        def __contains__(self,key):
-            return str(key) in self.root
-
-        def get(self,key,default=None):
-            if key in self: return self[key]
-            else: return default
+class HDFWrapper(object):
+    """
+    Simple wrapper that lets us index HDF files by tuples rather than only strings.
+    """ 
+    def __init__(self,root):
+        self.root = root
         
-        def keys(self):
-            def tryeval(x):
-                try: return eval(x)
-                except: return x
-            return map(tryeval,self.root.keys())
+    def __getitem__(self,key):
+        import h5py
+        value = self.root[str(key)]
+        if isinstance(value,h5py.Dataset): return value.value
+        elif isinstance(value,h5py.Group): return HDFWrapper(value)
+        else: return value
+        
+    def __contains__(self,key):
+        return str(key) in self.root
 
-    def load_kernels(kernels,lmax=None,pol=True):
-        return HDFWrapper(h5py.File(kernels))
+    def get(self,key,default=None):
+        if key in self: return self[key]
+        else: return default
+    
+    def keys(self):
+        def tryeval(x):
+            try: return eval(x)
+            except: return x
+        return map(tryeval,self.root.keys())
+
+def load_kernels(kernels,lmax=None,pol=True):
+    import h5py
+    return HDFWrapper(h5py.File(kernels))
 
 
 def load_kernels_pickle(kernels,lmax=None,pol=True):
@@ -797,8 +805,8 @@ def get_fid_cls(pcls,beams,fidcmb,pixwin,nl_eff=1):
         return ys
 
     for a,b in pcls.spectra:
-        bcmb = fidcmb[a[0],b[0]]*beams[a,b]*pixwin
-        fid_cls[a,b] = (fidize(pcls[a,b]-bcmb,*fidargs[a[0],b[0]])*nl_eff if a==b else 0) + bcmb
+        bcmb = fidcmb[a[0],b[0]]*beams[a,b]
+        fid_cls[a,b] = ((fidize(pcls[a,b]-bcmb,*fidargs[a[0],b[0]])*nl_eff if a==b else 0) + bcmb)*pixwin
 
     return fid_cls
 
@@ -817,10 +825,3 @@ def check_spicecache(polweight1,polweight2,spicecache):
     cachefile = osp.join(spicecache,md5)
     return (cachefile,osp.exists(cachefile))
 
-
-def sym_kerns(imll):
-    """
-    Add all keys to imll which are equal due to symmetry.
-    e.g. set ET,ET = TE,TE, etc... 
-    """
-    imll['BT']
