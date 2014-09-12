@@ -5,6 +5,7 @@ from itertools import takewhile, chain
 from numpy import *
 from numpy.linalg import norm
 from scipy.optimize import fmin, fmin_powell
+from scipy.interpolate import LSQUnivariateSpline
 from utils import *
 from imp import load_source, new_module
 import sys, os, re, gc
@@ -440,16 +441,24 @@ class PowerSpectra(object):
         return PowerSpectra(spectra=spectra, ells=a.ells, binning=a.binning)
 
     @staticmethod
-    def sum(ps):
-        """Return the sum of one or more PowerSpectra."""
+    def sum(ps,strict=False):
+        """
+        Return the sum of one or more PowerSpectra.
+        Args:
+            strict : If True, all PowerSpectra must have all the 
+                spectra and covariance entires, otherwise missing entires
+                are assumed 0.
+        """
         ells = [p.ells for p in ps]
         assert all(ell == ells[0] for ell in ells), "Can't add spectra with different ells."
-        maps = reduce(lambda x, y: x & y, [set(p.get_maps()) for p in ps])
-        spectra = SymmetricTensorDict([(k,sum(p.spectra[k] for p in ps)) for k in pairs(maps)],rank=2)
-        if all([p.cov for p in ps]): cov = SymmetricTensorDict([(k,sum(p.cov[k] for p in ps)) for k in pairs(pairs(maps))],rank=4)
-        else: cov=None
+        maps = set(chain(*(p.get_maps() for p in ps)))
+        spectra = SymmetricTensorDict([(k,sum(p.spectra[k] for p in ps if strict or (k in p.spectra))) 
+                                       for k in pairs(maps)
+                                       if any([k in p for p in ps])],rank=2)
+        cov = SymmetricTensorDict([(k,sum(p.cov[k] for p in ps if strict or (k in p.cov))) 
+                                   for k in pairs(pairs(maps))
+                                   if any([k in p.cov for p in ps])],rank=4)
         return PowerSpectra(spectra,cov,ells[0],binning=ps[0].binning)
-
 
 class MDict(dict):
     def __init__(self,*args,**kwargs):
@@ -663,6 +672,8 @@ class load_files(dict):
         super(load_files,self).__init__(files)
         if loadfn is None:
             self.loadfn = partial(loadtxt,usecols=usecols)
+        else:
+            self.loadfn = loadfn
 
     def load(self,pool=None):
         self.killpool = (pool is None)
@@ -786,29 +797,62 @@ def default_mask_name_transform(m):
 
 
 
-def get_fid_cls(pcls,beams,fidcmb,pixwin,nl_eff=1):
+def get_fid_cls(pcls,beams,pixwin):
     """
-    Get the fiducial model for the pcls (to be used in the covariance) given observed pcls, beams, and a fiducial cmb model.
+    Get the fiducial model (to be used in the covariance).
+
+    Args:
+        pcls : mask and pixwin deconvolved Cls
+        beams : beams
+        pixwin : pixel window function
+    Returns:
+        Fiducial mask deconvolved Cls (note the missing factor of pixwin as compared to pcls)
+
+    Notes:
+        We get the fiducal Cls via a spline smoothing of the pcls 
+        with `scipy.integrate.LSQUnivariateSpline`.
+
     """
+
+    lmax = pcls.ells.size
+    todl = hstack([1,arange(1,lmax)*(arange(1,lmax)+1)/2/pi])
+
     fid_cls=SymmetricTensorDict()
 
-    fidargs = {('T','T'):(200,1000,2),
-               ('E','E'):(100,None,-0.4),
-               ('B','B'):(100,None,-0.4)}
+    t=hstack([[10,30],arange(50,lmax,50)])
 
-    def fidize(y,window_len=200,xpiv=None,n=None,xminfit=10):
-        ys=smooth(y,window_len=window_len)
-        if xpiv is None: xpiv=window_len+2
-        if n is None: n = fmin_powell(lambda n: sum((log(ys[xpiv]*(arange(xminfit,xpiv)/float(xpiv))**n) - log(y[xminfit:xpiv]))**2),-1.,disp=False)
-        ys[2:xpiv] = ys[xpiv]*(arange(2,xpiv)/float(xpiv))**n
-        ys[:2]=0
-        return ys
 
-    for a,b in pcls.spectra:
-        bcmb = fidcmb[a[0],b[0]]*beams[a,b]
-        fid_cls[a,b] = ((fidize(pcls[a,b]-bcmb,*fidargs[a[0],b[0]])*nl_eff if a==b else 0) + bcmb)*pixwin
+    def getfid(*k):
+        """Get fiducial mask/beam/pixwin deconvolved Dl"""
+        x=pcls[k]/beams[k]*todl
+        w=getw(x[2:])
+        for _ in range(5):
+            g=LSQUnivariateSpline(x=arange(2,lmax),y=x[2:],t=t,w=w,k=3)
+            w=getw(g(arange(2,lmax)))
+        return hstack([zeros(2),g(arange(2,lmax))])
+
+    #auto spectra
+    def getw(cl):
+        return sqrt((2*arange(2,lmax)+1)/(2*cl**2))
+    for a,b in pcls.get_spectra():
+        if a==b: 
+            fid_cls[a,b] = getfid(a,b)
+
+    #cross spectra (which use fiducial auto spectra)
+    def getw(cl):
+        return sqrt((2*arange(2,lmax)+1)/abs(cla*clb+cl**2))
+    for a,b in pcls.get_spectra():
+        if a!=b:
+            cla = fid_cls[a,a][2:]
+            clb = fid_cls[b,b][2:]
+            fid_cls[a,b] = getfid(a,b)
+
+    for a,b in pcls.get_spectra():
+        fid_cls[a,b] *= pixwin/todl*beams[a,b]
 
     return fid_cls
+
+
 
 def haspol(m):
     import pyfits

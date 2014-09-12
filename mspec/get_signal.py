@@ -25,7 +25,6 @@ def get_signal(lmax,
                maps,
                beams,
                weights,
-               fidcmb,
                signal,
                kernels,
                masks=None,
@@ -115,9 +114,7 @@ def get_signal(lmax,
 
     if get_covariance:
 
-        # The fiducial model for the mask deconvolved Cl's which gets used in the covariance
-        fidcmb=SymmetricTensorDict(dict(zip([('T','T'),('E','E'),('B','B'),('T','E'),('E','B'),('T','B')],vstack([loadtxt(fidcmb)[:,:lmax],zeros((6,lmax))]))))
-        fid_cls=get_fid_cls(pcls,beams,fidcmb,pixwin,nl_eff=nl_eff)
+        fid_cls=get_fid_cls(pcls,beams,pixwin)
 
         mspec_log("Calculating Q terms...",rootlog=True)
         Qterms = [((i,a),(j,b)) for a,b in ps for i in 'TEB' for j in 'TEB']
@@ -167,6 +164,10 @@ def get_signal(lmax,
             try: os.makedirs(osp.dirname(signal))
             except: pass
             with open(signal,"w") as f: cPickle.dump(hat_cls_freq,f,protocol=2)
+            with open(signal+'_meta',"w") as f: cPickle.dump({'pcls':pcls,
+                                                              'beams':beams,
+                                                              'fid_cls':fid_cls if get_covariance else None},f,protocol=2)
+
 
     return hat_cls_freq, hat_cls_det
 
