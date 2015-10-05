@@ -493,6 +493,11 @@ def validate_params(p):
     return p
 
 
+def lims_to_q(lims):
+    """lims is a list of (start,end), both inclusive."""
+    q = zeros((len(lims),6000))
+    for i,(s,e) in enumerate(lims): q[i,s:e+1] = 1. / (e-s+1)
+    return q
 
 def get_bin_func(binstr,q=None):
     """
@@ -550,11 +555,6 @@ def get_bin_func(binstr,q=None):
         return q_bin
 
 
-    def lims_to_q(lims):
-        """lims is a list of (start,end), both inclusive."""
-        q = zeros((len(lims),6000))
-        for i,(s,e) in enumerate(lims): q[i,s:e+1] = 1. / (e-s+1)
-        return q
 
     if binstr=='q':
         return get_q_bin(q)
