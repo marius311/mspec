@@ -58,7 +58,6 @@ def get_mpi():
             comm = MPI.COMM_WORLD
             (rank,size) = (comm.Get_rank(),comm.Get_size())
         except Exception as e:
-            print e.message
             (rank,size,comm) = (0,1,None)
             
     return namedtuple('mpi',['rank','size','comm'])(rank,size,comm)
