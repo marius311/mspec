@@ -521,7 +521,7 @@ def get_bin_func(binstr,q=None):
     def slice_bins(lmins,lmaxs,lslice):
         """Gets bin slice correpsonding to ell-slice 's'."""
         return slice(None if lslice.start is None else bisect_left(lmins,lslice.start),
-                     None if lslice.stop is None else bisect_left(lmaxs,lslice.stop))
+                     None if lslice.stop is None else bisect_right(lmaxs,lslice.stop))
 
     def get_q_bin(q):
         ilen = lambda i: sum(1 for _ in i)
