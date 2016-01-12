@@ -1,16 +1,12 @@
 #!/usr/bin/env python
 
 from mspec import *
-import healpy as H
 import sys, os, re, os.path as osp
 from numpy import *
 from utils import *
 from numpy.linalg import inv
 import cPickle
 from multiprocessing.dummy import Pool
-import psutil
-from mpi4py import MPI
-import h5py
 
 
 def get_kernels(masks,
@@ -20,6 +16,11 @@ def get_kernels(masks,
                 mask_name_transform=default_mask_name_transform,
                 clobber=False,
                 **kwargs):
+
+    import healpy as H
+    import psutil
+    from mpi4py import MPI
+    import h5py
 
     def get_alms((m1,m2)):
         mspec_log('Getting alms for '+str((m1,m2)))
