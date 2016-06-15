@@ -56,7 +56,9 @@ def get_kernels(masks,
     masks = {k:mask_name_transform(k) for k in masks.values()}
     if masks_forgll:
         masks_forgll = {k:mask_name_transform(k) for k in masks_forgll.values()}
-    if is_mpi_master() and not osp.exists(osp.dirname(kernels)): os.makedirs(kernels)
+    else:
+        masks_forgll = {}
+    if is_mpi_master() and not osp.exists(osp.dirname(kernels)): os.makedirs(osp.dirname(kernels))
     pool=Pool(get_num_threads()/2)
     lmax_kernel=min(3*2048-1,2*lmax)
     hdf = h5py.File(kernels,mode='w',driver='mpio', comm=MPI.COMM_WORLD)
