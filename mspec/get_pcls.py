@@ -173,7 +173,7 @@ def get_cls(maps,
              if do_polarization and haspol(map1)}
     tmaps = dict(set(maps.items()) - set(pmaps.items()))
     
-    alms = dict(mpi_map2(getalm,pmaps.items()+tmaps.items()))
+    alms = dict(mpi_map2(getalm,pmaps.items()+tmaps.items(),distribute=False))
 
     if is_mpi_master():
 

@@ -9,9 +9,7 @@ from numpy.linalg import inv
 import cPickle
 from multiprocessing.dummy import Pool
 import psutil
-from mpi4py import MPI
-import h5py
-
+import gc
 
 def get_kernels(masks,
                 kernels,
@@ -20,20 +18,18 @@ def get_kernels(masks,
                 mask_name_transform=default_mask_name_transform,
                 clobber=False,
                 **kwargs):
+    
+    import h5py
 
     def get_alms((m1,m2)):
         mspec_log('Getting alms for '+str((m1,m2)))
-        return ((m1,m2),
-                H.map2alm(H.read_map(m1,verbose=False)*(1 if m2 is None else H.read_map(m2,verbose=False)),
-                          lmax=min(3*2048-1,2*lmax)))
+        hdf['alms'][str((m1,m2))][:]=H.map2alm(H.read_map(m1,verbose=False)*(1 if m2 is None else H.read_map(m2,verbose=False)),lmax=lmax_kernel)
 
     def get_cls((m12,m23)):
         mspec_log('Getting cls for '+str((m12,m23)))
-        return ((m12,m23), H.alm2cl(alms[m12],alms[m23]))
-
+        return ((m12,m23), H.alm2cl(hdf['alms'][str(m12)][:],hdf['alms'][str(m23)][:]))
 
     def get_kernel((k,ks,ktype)):
-
         mspec_log('Doing %s'%str(ks))
         mlls = qk.get_mlls(cls[k])
         def getk((a,b,c,d)): return hdf[ktype][str(ks)][str(((a,b),(c,d)))]
@@ -61,19 +57,24 @@ def get_kernels(masks,
         masks_forgll = {k:mask_name_transform(k) for k in masks_forgll.values()}
     if is_mpi_master() and not osp.exists(osp.dirname(kernels)): os.makedirs(kernels)
     pool=Pool(get_num_threads()/2)
+    lmax_kernel=min(3*2048-1,2*lmax)
+    hdf = h5py.File(kernels,mode='w',driver='mpio', comm=MPI.COMM_WORLD)
 
     #alms
     specs, specs_forgll = [(m,None) for m in masks], pairs(masks_forgll)
     mspec_log('Getting kernels for:\n'+'\n'.join(['  '+str(s) for s in (specs+specs_forgll)]),rootlog=True)
-    alms = dict(mpi_map2(get_alms,specs+specs_forgll))
+    g=hdf.create_group('alms')
+    for alm in specs+specs_forgll:
+        g.create_dataset(str(alm),shape=(H.Alm.getsize(lmax_kernel),),dtype=complex)
+    mpi_map2(get_alms,specs+specs_forgll)
 
     #cls
-    if is_mpi_master():
-        cls = dict(pool.map(get_cls,pairs(specs)+pairs(specs_forgll)))
-    if not is_mpi_master() or get_mpi_size()==1:
-        mspec_log('Precompting Wigner 3j quantities...')
-        qk = quickkern(lmax,pool=pool)
-    cls = mpi_consistent(cls if is_mpi_master() else None)
+    cls=dict(mpi_map2(get_cls,pairs(specs)+pairs(specs_forgll),pool=pool))
+
+    #wigners
+    mspec_log('Precompting Wigner 3j quantities...')
+    qk = quickkern(lmax,pool=pool)
+
 
     #kernels
     work  = [(((m1,None),(m2,None)),(n1,n2),'imll') 
@@ -81,9 +82,7 @@ def get_kernels(masks,
     work += [(((m1,m2),(m3,m4)),((n1,n2),(n3,n4)),'gll')
              for (((m1,n1),(m2,n2)),((m3,n3),(m4,n4))) in pairs(pairs(masks_forgll.items()))]
     
-    hdf = h5py.File(kernels,mode='w',driver='mpio', comm=MPI.COMM_WORLD)
     try:
-        #set up groups, which all processes must do                                
         for t in ['imll','gll']: hdf.create_group(t)
         for k,kn,ktype in work:
             g = hdf[ktype].create_group(str(kn))
