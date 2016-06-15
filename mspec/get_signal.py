@@ -98,7 +98,7 @@ def get_signal(lmax,
             if len(xs)>0: dpcls = sum(dot(imlls(a,b)[(a[0],b[0]),(x1,x2)],pcls[(x1,)+a[1:],(x2,)+b[1:]]) for x1,x2 in xs)
             else: dpcls = pcls[a,b]
             return ((a,b),dpcls/pixwin)
-        pcls = PowerSpectra(dict(mpi_consistent(mpi_map2(deconv,pcls.get_spectra(),pool=thread_pool))))
+        pcls = PowerSpectra(dict(mpi_map2(deconv,pcls.get_spectra(),pool=thread_pool,distribute=True)))
 
     # The per detector signal estimate
     mspec_log("Calculating per-detector signal...",rootlog=True)

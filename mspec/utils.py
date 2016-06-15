@@ -113,11 +113,16 @@ def mpi_map2(function,sequence,pool=None,distribute=True,nthreads=None):
 
     sequence = mpi_consistent(sequence)
     if pool is None:
-        return mpi4py_map.map(function,sequence)
+        res = mpi4py_map.map(function,sequence)
     else:
         def thread_map(sequence):
             return pool.map(function,sequence)    
-        return flatten(mpi4py_map.map(thread_map,chunks(sequence,nthreads or get_num_threads())))
+        res = flatten(mpi4py_map.map(thread_map,chunks(sequence,nthreads or get_num_threads())))
+
+    if distribute:
+        return mpi_consistent(res)
+    else:
+        return res
 
 
 
