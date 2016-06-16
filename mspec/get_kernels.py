@@ -75,8 +75,8 @@ def get_kernels(masks,
     cls=dict(mpi_map2(get_cls,pairs(specs)+pairs(specs_forgll),pool=pool))
 
     #wigners
-        mspec_log('Precompting Wigner 3j quantities...')
-        qk = quickkern(lmax,pool=pool)
+    mspec_log('Precompting Wigner 3j quantities...')
+    qk = quickkern(lmax,pool=pool)
 
 
     #kernels
