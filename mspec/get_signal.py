@@ -46,6 +46,9 @@ def get_signal(lmax,
     # Load stuff
     mspec_log("Loading pseudo-cl's...",rootlog=True)
     pcls = load_pcls(pcls,maps=maps,pool=proc_pool).sliced(lmax).rescaled(rescale)
+    if not do_polarization:
+        pcls = PowerSpectra({(a,b):v for (a,b),v in pcls.spectra.items() if a[0]==b[0]=='T'})
+
 
     mspec_log("Loading beams...",rootlog=True)
     if isinstance(beams,load_files): beams = PowerSpectra(beams.load(pool=proc_pool))
