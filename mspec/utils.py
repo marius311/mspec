@@ -1,6 +1,6 @@
 import re, os
-from itertools import combinations_with_replacement, product
 from numpy import *
+from itertools import combinations_with_replacement, product
 import itertools
 import traceback
 from collections import namedtuple
@@ -278,4 +278,3 @@ def smooth(x, window_len=10, window='hanning'):
         w = getattr(np, window)(window_len)
     y = np.convolve(w/w.sum(), s, mode='same')
     return y[window_len-1:-window_len+1]
-
