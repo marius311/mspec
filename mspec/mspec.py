@@ -688,12 +688,13 @@ class load_files(dict):
         return {k:loaded[v] for k,v in self.items()}
 
 
-def equal_cross_weights(pcls,autoTE=False):
+def equal_cross_weights(pcls,usespec=None,autoTE=False):
     """
     Return a equal weighting of cross spectra of the detector maps in pcls
     """
     fks = set((k1[:-1],k2[:-1]) for k1,k2 in pcls.spectra)
-    usespec = (lambda a,b: a!=b) if autoTE else (lambda a,b: a[1:]!=b[1:])
+    if usespec is None:
+        usespec = (lambda a,b: a!=b) if autoTE else (lambda a,b: a[1:]!=b[1:])
     weights = {(alpha,beta):{tuple(sorted((a,b))):1 for a,b in pcls.spectra if usespec(a,b) and a[:-1]==alpha and b[:-1]==beta} for alpha,beta in fks}
     return get_normed_weights(weights)
 
@@ -868,4 +869,3 @@ def check_spicecache(polweight1,polweight2,spicecache):
     md5 = hashlib.md5(hstack([polweight1,polweight2])).hexdigest()
     cachefile = osp.join(spicecache,md5)
     return (cachefile,osp.exists(cachefile))
-
